@@ -16,3 +16,9 @@
  (libraries diagrams vg.htmlc)
  (modes js)
  (preprocess (pps js_of_ocaml-ppx)))
+
+(executable
+ (name bridge)
+ (modules bridge)
+ (libraries diagrams js_of_ocaml)
+ (modes js))

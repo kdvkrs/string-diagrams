@@ -28,6 +28,20 @@ setup.log
 # Local OPAM switch
 _opam/
 
+# Node/Vite artifacts
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+web-next/node_modules/
+web-next/dist/
+web-next/public/bridge.bc.js
+web-next/tsconfig.tsbuildinfo
+www/applet.bc.js
+
+# Local editor/system noise
+.DS_Store
+
 # test files
 test.*
 
