@@ -28,7 +28,7 @@ clean::
 	dune clean
 
 web-next-bridge::
-	eval $$(opam env --switch . --set-switch) && dune build ./bin/bridge.bc.js
+	opam exec -- dune build ./bin/bridge.bc.js
 	mkdir -p web-next/public
 	install -m 0644 _build/default/bin/bridge.bc.js web-next/public/bridge.bc.js
 
