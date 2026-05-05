@@ -5,6 +5,37 @@ tool & library to visualize, edit and perform graphical rewriting steps in strin
 homepage: https://perso.ens-lyon.fr/damien.pous/string-diagrams/
 companion Rocq library: https://github.com/damien-pous/categories/
 
+## open-campus puzzle mode (tablet / kiosk)
+
+This fork adds a tablet-first Puzzle Mode for outreach booths.
+
+### quick local-LAN deployment
+
+1. Build and stage local web assets:
+
+```sh
+cd /Users/klaus/Scratch/string-diagrams
+make web-next-build
+```
+
+2. Start a static server from `web-next/dist/`:
+
+```sh
+python3 -m http.server 8080 --directory web-next/dist
+```
+
+3. Open on each iPad Safari:
+
+```text
+http://<host-lan-ip>:8080/
+```
+
+4. For development with live reload:
+
+```sh
+make web-next-dev
+```
+
 # build instructions
 
 opam install dune cairo2-gtk otfm vg
