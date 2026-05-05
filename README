@@ -1,42 +1,79 @@
-# string-diagram
+# string-diagram outreach fork
+
+This is an unofficial outreach prototype based on Damien Pous' `string-diagrams`.
+It adapts graphical string-diagram rewriting into a tablet-friendly proof-puzzle
+for Open Campus / science-fair-style demonstrations.
+
+The aim is to let children and non-expert visitors manipulate diagrams by legal
+moves and see the core proof-assistant idea: reasoning can be checked step by
+step. This fork substantially rewrites the browser-facing frontend and
+interaction model, while reusing or preserving the OCaml diagram/proof interop
+path where possible.
+
+This is not the official upstream project, not an endorsed replacement, and not
+a general-purpose theorem-proving UI.
+
+## Upstream attribution
+
+This prototype is based on Damien Pous' `string-diagrams` project:
+
+- Project page: https://perso.ens-lyon.fr/damien.pous/string-diagrams/
+- Upstream repository: https://github.com/damien-pous/string-diagrams
+- Paper: "String Diagrams for Monoidal Categories, in Rocq":
+  https://arxiv.org/abs/2602.19806
+- Companion Rocq library: https://github.com/damien-pous/categories/
+
+The original project provides the string-diagram editor, mathematical ideas, and
+Rocq/proof-oriented workflow. This fork has a narrower outreach goal and should
+not be assumed to have the same scope, guarantees, or expert functionality as the
+upstream research editor.
+
+## Prototype demo
+
+Build the web-next prototype:
+
+```sh
+make web-next-build
+```
+
+Serve the static bundle locally:
+
+```sh
+python3 -m http.server 8080 --directory web-next/dist
+```
+
+Open on tablets:
+
+```text
+http://<host-lan-ip>:8080/
+```
+
+For development with live reload:
+
+```sh
+make web-next-dev
+```
+
+## License
+
+This fork follows upstream and is distributed under the GNU General Public
+License v3.0. See `LICENSE`. Unless stated otherwise, new code added in this
+fork is also licensed under GPLv3.
+
+---
+
+# Original upstream README
+
+The following text is retained from the upstream project README for reference.
+
+## string-diagram
 
 tool & library to visualize, edit and perform graphical rewriting steps in string diagrams
 
 homepage: https://perso.ens-lyon.fr/damien.pous/string-diagrams/
 companion Rocq library: https://github.com/damien-pous/categories/
 
-## open-campus puzzle mode (tablet / kiosk)
-
-This fork adds a tablet-first Puzzle Mode for outreach booths.
-
-### quick local-LAN deployment
-
-1. Build and stage local web assets:
-
-```sh
-cd /Users/klaus/Scratch/string-diagrams
-make web-next-build
-```
-
-2. Start a static server from `web-next/dist/`:
-
-```sh
-python3 -m http.server 8080 --directory web-next/dist
-```
-
-3. Open on each iPad Safari:
-
-```text
-http://<host-lan-ip>:8080/
-```
-
-4. For development with live reload:
-
-```sh
-make web-next-dev
-```
-
-# build instructions
+## build instructions
 
 opam install dune cairo2-gtk otfm vg
 make
@@ -45,7 +82,7 @@ make
 (comment the relevant lines in bin/dune if installing these optional dependencies is problematic)
 
 
-# using the program
+## using the program
 
 make run
 
@@ -53,7 +90,7 @@ enter your favorite goal in the text box,
 or use Ctrl-O to open one of the .sd files in the toplevel directory
 
 
-# syntax
+## syntax
 
 the syntax is designed to be permissive, several tokens are mapped to the same behaviour.
 for instance, both
@@ -68,7 +105,7 @@ see *.sd files for examples, and files lib/lexer.mll and lib/parser.mly for a co
 when copy-pasting a Rocq goal, remove irrelevant hypotheses, including the declaration of the ambiant monoidal category and the object declarations.
 
 
-# keys
+## keys
 
 1..n    rewrite box using matching hypothesis
 u       unbox or unfold node
@@ -95,9 +132,9 @@ Ctrl-V  load from clipboard
 Ctrl-F  toggle fullscreen
 
 
-# modules
+## modules
 
-## lib
+### lib
 Misc:        miscellaneous utilities
 
 Set:         finite sets
@@ -133,7 +170,7 @@ Program:     UI-independent main program
 GArena:	     GTK arena
 
 
-## bin
+### bin
 Sd:          GTK main program
 Applet:      javascript web applet
 Check:	     text mode program to check .sd files
