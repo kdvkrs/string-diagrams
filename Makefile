@@ -38,5 +38,8 @@ web-next-dev:: web-next-bridge
 web-next-build:: web-next-bridge
 	cd web-next && npm run build
 
+web-next-serve:: web-next-build
+	python3 -m http.server 8080 --directory web-next/dist
+
 archive:
 	git archive --prefix string-diagrams/ main | bzip2 > string-diagrams.tar.bz2

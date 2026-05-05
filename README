@@ -39,7 +39,7 @@ make web-next-build
 Serve the static bundle locally:
 
 ```sh
-python3 -m http.server 8080 --directory web-next/dist
+make web-next-serve
 ```
 
 Open on tablets:
@@ -53,6 +53,10 @@ For development with live reload:
 ```sh
 make web-next-dev
 ```
+
+Do not open `web-next/index.html` directly with a `file://` URL. That file is
+the Vite source entrypoint and must be served by Vite. For a built prototype,
+serve `web-next/dist` over HTTP as shown above.
 
 ## License
 

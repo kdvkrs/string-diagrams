@@ -28,3 +28,12 @@ make web-next-build
 ```
 
 Then serve `web-next/dist` with any static server.
+
+For a local preview:
+
+```sh
+make web-next-serve
+```
+
+Do not open `web-next/index.html` directly with a `file://` URL. It is the Vite
+source entrypoint, not the built app.
