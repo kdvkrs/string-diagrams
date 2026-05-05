@@ -50,12 +50,18 @@ let get s =
 
 let add_listener elt evt f =
   ignore(Html.addEventListener elt evt (Html.handler f) Js._true)
+
+let now_ms () : float =
+  Js.float_of_number (Js.Unsafe.fun_call (Js.Unsafe.js_expr "Date.now") [||])
   
 
 class arena (canvasdiv: Html.divElement Js.t) (canvas: Html.canvasElement Js.t) =
   object(self)
     inherit Arena.generic
-    
+
+    val mutable render_w = 0
+    val mutable render_h = 0
+
     method private dsize =
       float_of_int canvasdiv##.clientWidth,
       float_of_int canvasdiv##.clientHeight
@@ -65,17 +71,15 @@ class arena (canvasdiv: Html.divElement Js.t) (canvas: Html.canvasElement Js.t) 
       let x,y = dpointer in
       float_of_int x,
       float_of_int y
+
+    method set_pointer_device x y =
+      dpointer <- max 0 x, max 0 y
     
     method! refresh =
-      (* let w',h' = canvasdiv##.clientWidth, canvasdiv##.clientHeight in *)
-      (* Format.eprintf "A: (%i,%i), (%i,%i)@." *)
-      (*   canvasdiv##.clientWidth canvasdiv##.clientHeight *)
-      (*   canvas##.clientWidth canvas##.clientHeight; *)
-      canvas##.width := canvasdiv##.clientWidth;
-      canvas##.height := canvasdiv##.clientHeight - 4;
-      (* Format.eprintf "B: (%i,%i), (%i,%i)@." *)
-      (*   canvasdiv##.clientWidth canvasdiv##.clientHeight *)
-      (*   canvas##.clientWidth canvas##.clientHeight; *)
+      let w' = max 64 canvasdiv##.clientWidth in
+      let h' = max 64 (canvasdiv##.clientHeight - 4) in
+      if w' <> render_w then (canvas##.width := w'; render_w <- w');
+      if h' <> render_h then (canvas##.height := h'; render_h <- h');
       let w,h = self#dsize in
       let size = V2.(v w h) in
       let vgr = Vgr.create (Vgr_htmlc.target ~resize:false canvas) `Other in 
@@ -83,11 +87,6 @@ class arena (canvasdiv: Html.divElement Js.t) (canvas: Html.canvasElement Js.t) 
       let image = I.blend Messages.temporary#get image in
       ignore (Vgr.render vgr (`Image (size, self#view, image)));
       ignore (Vgr.render vgr `End);
-      (* Format.eprintf "C: (%i,%i), (%i,%i)@." *)
-      (*   canvasdiv##.clientWidth canvasdiv##.clientHeight *)
-      (*   canvas##.clientWidth canvas##.clientHeight; *)
-      (* canvas##.width := w'; *)
-      (* canvas##.height := h'; *)
 
     method private scroll ev =
       if Js.to_bool ev##.ctrlKey then
@@ -125,7 +124,7 @@ class arena (canvasdiv: Html.divElement Js.t) (canvas: Html.canvasElement Js.t) 
       add_listener canvas Html.Event.mousedown self#mousedown;
       add_listener canvas Html.Event.mousemove self#mousemove;
       add_listener canvas Html.Event.mouseup self#mouseup;
-      add_listener canvasdiv Html.Event.mousemove self#checksize;
+      add_listener Html.window Html.Event.resize self#checksize;
       ()
 
   end
@@ -142,7 +141,23 @@ let onload _ =
   messages##.style##.border := Js.string "none";
   (* messages##.style##setProperty (Js.string "resize") (Js.string "none"); *)
   Messages.set_output (set_text messages) (fun () -> set_text messages "");
-  let arena = new arena canvasdiv canvas in
+  let arena_ext = new arena canvasdiv canvas in
+  let arena: Types.arena = (arena_ext :> Types.arena) in
+  let touch_active_until = ref 0.0 in
+  let touch_select_open = ref false in
+  let touch_dragging = ref false in
+  let mark_touch_active () = touch_active_until := now_ms () +. 500.0 in
+  let mouse_allowed () = now_ms () > !touch_active_until in
+  let touch_point (ev: Html.touchEvent Js.t) =
+    let l = ev##.changedTouches in
+    if l##.length = 0 then None
+    else
+      let t = Js.Optdef.get (l##item 0) (fun () -> assert false) in
+      Some (
+        int_of_float (Js.float_of_number t##.clientX) - canvasdiv##.offsetLeft,
+        int_of_float (Js.float_of_number t##.clientY) - canvasdiv##.offsetTop
+      )
+  in
   let examples = get "examples" in
   let ui: _ Types.ui_io =
     object
@@ -219,9 +234,53 @@ let onload _ =
   add_listener Html.window Html.Event.keydown (catch onkeypress);
   add_listener entry Html.Event.keyup (catch onkeyup);
   (* for mouse events, ctrl-ones are already caught by the arena *)
-  add_listener canvas Html.Event.mousedown (catch' onbuttonpress);
-  add_listener canvas Html.Event.mousemove (catch' ~keep:true (fun _ -> self#on_motion));
-  add_listener canvas Html.Event.mouseup (catch' (fun _ -> self#on_button_release));      
+  add_listener canvas Html.Event.mousedown
+    (fun ev -> if mouse_allowed () then catch' onbuttonpress ev else Js._false);
+  add_listener canvas Html.Event.mousemove
+    (fun ev -> if mouse_allowed () then catch' ~keep:true (fun _ -> self#on_motion) ev else Js._false);
+  add_listener canvas Html.Event.mouseup
+    (fun ev -> if mouse_allowed () then catch' (fun _ -> self#on_button_release) ev else Js._false);
+
+  add_listener canvas Html.Event.touchstart (fun ev ->
+    let ev = (Js.Unsafe.coerce ev: Html.touchEvent Js.t) in
+    ev##preventDefault;
+    mark_touch_active();
+    touch_dragging := false;
+    (match touch_point ev with
+    | Some(x,y) -> arena_ext#set_pointer_device x y
+    | None -> ());
+    if not !touch_select_open then self#on_button_press ~ctrl:false ~shft:false;
+    Js._false);
+  add_listener canvas Html.Event.touchmove (fun ev ->
+    let ev = (Js.Unsafe.coerce ev: Html.touchEvent Js.t) in
+    ev##preventDefault;
+    mark_touch_active();
+    touch_dragging := true;
+    (match touch_point ev with
+    | Some(x,y) -> arena_ext#set_pointer_device x y
+    | None -> ());
+    self#on_motion;
+    Js._false);
+  add_listener canvas Html.Event.touchend (fun ev ->
+    let ev = (Js.Unsafe.coerce ev: Html.touchEvent Js.t) in
+    ev##preventDefault;
+    mark_touch_active();
+    (match touch_point ev with
+    | Some(x,y) -> arena_ext#set_pointer_device x y
+    | None -> ());
+    if !touch_dragging then (
+      self#on_button_release;
+      touch_select_open := false
+    ) else if !touch_select_open then (
+      self#on_motion;
+      self#on_button_release;
+      touch_select_open := false
+    ) else (
+      touch_select_open := true;
+      message "selection started: tap second point to complete"
+    );
+    Js._false);
+
   ignore (Html.window##setInterval
             (Js.wrap_callback (Printexc.print (fun _ -> self#on_tic)))
             (Js.float 25.));
@@ -230,5 +289,3 @@ let onload _ =
 
 let _ =
   Html.window##.onload := Html.handler onload;
-
-
