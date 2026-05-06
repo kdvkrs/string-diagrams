@@ -7,7 +7,101 @@ open Gg
 let demo_state =
   "m: M⊗M -> M\nn: N⊗N -> N\nx: N⊗M -> M⊗N\nmn: M⊗N⊗M⊗N -> M⊗N := M·x·N ; m·n\nmA: m·M ; m ≡ M·m ; m\nnA: n·N ; n ≡ N·n ; n\nmx: N·m ; x ≡ x·M ; M·x ; m·N\nnx: n·M ; x ≡ N·x ; x·N ; M·n\n------\nM·x·N⊗M⊗N ; M⊗M·n·M⊗N ; m·x·N ; m·n ≡ M⊗N⊗M·x·N ; M⊗N·m·N⊗N ; M·x·n ; m·n"
 
+let mu2_state =
+  "m: M⊗M -> M\n\
+   e: 1 -> M\n\
+   n: N⊗N -> N\n\
+   f: 1 -> N\n\
+   x: N⊗M -> M⊗N\n\
+   mn<color=orange> := id·x·id ; m·n\n\
+   ef<color=orange> := e·f\n\
+   mm: m·id ; m = id·m ; m\n\
+   em: e·id ; m = id\n\
+   me: id·e ; m = id\n\
+   nn: n·id ; n = id·n ; n\n\
+   fn: f·id ; n = id\n\
+   nf: id·f ; n = id\n\
+   mx: id·m ; x = x·id ; id·x ; m·id\n\
+   ex: id·e ; x = e·id\n\
+   nx: n·id ; x = id·x ; x·id ; id·n\n\
+   fx: f·id ; x = id·f"
+
+let mu3_state =
+  "m: M^2 -> M\n\
+   n: N^2-> N\n\
+   o: O^2-> O\n\
+   x: N⊗M -> M⊗N\n\
+   y: O⊗N -> N⊗O\n\
+   z: O⊗M -> M⊗O\n\
+   mno<color=turquoise> := id·id·z·id·id ; id·x·y·id ; m·n·o\n\
+   mm: m·id ; m = id·m ; m\n\
+   nn: n·id ; n = id·n ; n\n\
+   oo: o·id ; o = id·o ; o\n\
+   mx: id·m ; x = x·id ; id·x ; m·id\n\
+   nx: n·id ; x = id·x ; x·id ; id·n\n\
+   ny: id·n ; y = y·id ; id·y ; n·id\n\
+   oy: o·id ; y = id·y ; y·id ; id·o\n\
+   mz: id·m ; z = z·id ; id·z ; m·id\n\
+   oz: o·id ; z = id·z ; z·id ; id·o\n\
+   xyz: y·id ; id·z ; x·id = id·x ; z·id ; id·y"
+
+let left_unit_state = mu2_state ^ "\n---\nef·M·N ; mn = M·N"
+let right_unit_state = mu2_state ^ "\n---\nM·N·ef ; mn = M·N"
+let three_monads_state = mu3_state ^ "\n---\nmno·id·id·id ; mno = id·id·id·mno ; mno"
+
+type puzzle = {
+  id: string;
+  level: string;
+  title: string;
+  subtitle: string;
+  source: string;
+  visible_rules: string list option;
+}
+
+let puzzles = [
+  {
+    id = "composite-monad-left-unit";
+    level = "Level 1";
+    title = "Level 1: Left Unit";
+    subtitle = "Shrink the left unit fork until only the clean composite string remains.";
+    source = left_unit_state;
+    visible_rules = Some ["em"; "fn"; "fx"];
+  };
+  {
+    id = "composite-monad-right-unit";
+    level = "Level 2";
+    title = "Level 2: Right Unit";
+    subtitle = "Shrink the right unit fork. Same proof idea, mirrored.";
+    source = right_unit_state;
+    visible_rules = Some ["me"; "nf"; "ex"];
+  };
+  {
+    id = "composite-monad-associativity";
+    level = "Level 3";
+    title = "Level 3: Double Fork";
+    subtitle = "Lasso-select a region on either side, then tap a visual rule.";
+    source = demo_state;
+    visible_rules = None;
+  };
+  {
+    id = "three-monad-composition";
+    level = "Level 4";
+    title = "Level 4: Three Monads";
+    subtitle = "Compose three monads by moving the crossings into the same shape.";
+    source = three_monads_state;
+    visible_rules = None;
+  };
+]
+
+let default_puzzle_id = "composite-monad-left-unit"
+
+let puzzle_by_id id =
+  match List.find_opt (fun p -> p.id = id) puzzles with
+  | Some p -> p
+  | None -> List.find (fun p -> p.id = default_puzzle_id) puzzles
+
 type bridge_state = {
+  puzzle: puzzle;
   mutable env: Graph_type.env;
   mutable lhs: Graph_type.graph;
   mutable rhs: Graph_type.graph;
@@ -25,9 +119,50 @@ let parse_state s =
   | e, Eqn ((lhs, rhs), _) -> e, lhs, rhs
   | _, Trm _ -> failwith "expected equation state"
 
+let nodes_of_graph g =
+  MSet.fold (fun n acc -> n :: acc) [] g#nodes
+
+let rec unfold_defined_nodes env g =
+  let changed = ref false in
+  List.iter
+    (fun n ->
+      match n#kind with
+      | Box h ->
+         unfold_defined_nodes env h;
+         g#unbox n;
+         changed := true
+      | Var f ->
+         match List.assoc_opt f env with
+         | Some (_, T2 (_, Some h)) ->
+            let h = Graph.copy env h in
+            unfold_defined_nodes env h;
+            g#subst n h;
+            changed := true
+         | _ -> ())
+    (nodes_of_graph g);
+  if !changed then unfold_defined_nodes env g
+
+let unfold_env env =
+  List.iter
+    (function
+      | _, (_, T2 (_, Some g)) -> unfold_defined_nodes env g
+      | _, (_, TE (l, r)) ->
+         unfold_defined_nodes env l;
+         unfold_defined_nodes env r
+      | _ -> ())
+    env
+
+let parse_puzzle_state s =
+  let env, lhs, rhs = parse_state s in
+  unfold_env env;
+  unfold_defined_nodes env lhs;
+  unfold_defined_nodes env rhs;
+  env, lhs, rhs
+
 let state_ref =
-  let env, lhs, rhs = parse_state demo_state in
-  ref { env; lhs; rhs; proof = []; messages = ["Demo loaded"]; undo = []; redo = []; sid_counter = 0 }
+  let puzzle = puzzle_by_id default_puzzle_id in
+  let env, lhs, rhs = parse_puzzle_state puzzle.source in
+  ref { puzzle; env; lhs; rhs; proof = []; messages = ["Demo loaded"]; undo = []; redo = []; sid_counter = 0 }
 
 let js_str s = Js.string s
 let obj fields = Js.Unsafe.obj (Array.of_list fields)
@@ -39,6 +174,24 @@ let css_of_color c =
     (int_of_float (255. *. Color.g c))
     (int_of_float (255. *. Color.b c))
     (Color.a c)
+
+let typ_name t = Format.asprintf "%a" Typ.pp1 t
+
+let p2_obj p =
+  obj ["x", Js.Unsafe.inject (P2.x p); "y", Js.Unsafe.inject (P2.y p)]
+
+let visual_obj (n: node) =
+  let fields = ref [] in
+  (match n#get "shape" with
+   | Some shape -> fields := ("shape", Js.Unsafe.inject (js_str shape)) :: !fields
+   | None -> ());
+  (match n#get "radius" with
+   | Some radius -> fields := ("radius", Js.Unsafe.inject (float_of_string radius)) :: !fields
+   | None -> ());
+  (match n#get "size" with
+   | Some size -> fields := ("size", Js.Unsafe.inject (p2_obj (Misc.p2_of_string size))) :: !fields
+   | None -> ());
+  obj (List.rev !fields)
 
 let ensure_sid st (n: node) =
   match n#get "sid" with
@@ -78,6 +231,9 @@ let snapshot_node st (n: node) =
     "y1", Js.Unsafe.inject (P2.y br);
     "nsources", Js.Unsafe.inject n#nsources;
     "ntargets", Js.Unsafe.inject n#ntargets;
+    "sourceTypes", Js.Unsafe.inject (arr (List.map (fun t -> js_str (typ_name t)) n#sources));
+    "targetTypes", Js.Unsafe.inject (arr (List.map (fun t -> js_str (typ_name t)) n#targets));
+    "visual", Js.Unsafe.inject (visual_obj n);
     "color", Js.Unsafe.inject (js_str color);
     "selectable", Js.Unsafe.inject (Js.bool (kind = "var"))
   ]
@@ -114,14 +270,11 @@ let snapshot_edge st (g: graph) (i,o) =
        let sid = ensure_sid st n in
        obj ["kind", Js.Unsafe.inject (js_str "nodeSource"); "nodeId", Js.Unsafe.inject (js_str sid); "port", Js.Unsafe.inject p]
   in
-  let a,b,c,d = g#edge_curve (i,o) in
   let edge_color = css_of_color (Graph.icolor g i) in
-  let p2 (p: point) = obj ["x", Js.Unsafe.inject (P2.x p); "y", Js.Unsafe.inject (P2.y p)] in
   obj [
     "id", Js.Unsafe.inject (js_str (edge_id i o));
     "from", Js.Unsafe.inject port_ref_i;
     "to", Js.Unsafe.inject port_ref_o;
-    "curve", Js.Unsafe.inject (arr [p2 a; p2 b; p2 c; p2 d]);
     "color", Js.Unsafe.inject (js_str edge_color)
   ]
 
@@ -139,7 +292,13 @@ let snapshot_graph st id (g: graph) =
     "targets", Js.Unsafe.inject g#ntargets
   ]
 
-let hyps st = Env.hyps st.env
+let hyps st =
+  let all = Env.hyps st.env in
+  match st.puzzle.visible_rules with
+  | None -> all
+  | Some names -> List.filter (fun (name, _) -> List.mem name names) all
+
+let rule_names st = List.map fst (hyps st)
 
 let graph_by_id st = function
   | "rhs" -> st.rhs
@@ -160,16 +319,25 @@ let selected_nodes st graph_id selected_ids =
 
 let mset_size s = MSet.fold (fun _ n -> n + 1) 0 s
 
-type rule_match = {
-  rw: string;
-  repl: graph;
-}
-
 type extracted = {
   subgraph: graph;
   inputs: (Graph_type.iport * Graph_type.oport) list;
   outputs: (Graph_type.iport * Graph_type.oport) list;
   box: box;
+}
+
+type rule_match = {
+  rw: string;
+  repl: graph;
+  input_perm: int list;
+  output_perm: int list;
+}
+
+type extraction_variant = {
+  input_perm: int list;
+  inputs: (Graph_type.iport * Graph_type.oport) list;
+  output_perm: int list;
+  outputs: (Graph_type.iport * Graph_type.oport) list;
 }
 
 let sid_list_of_nodes nodes =
@@ -193,7 +361,7 @@ let cmp_point p q =
   let c = compare (P2.x p) (P2.x q) in
   if c <> 0 then c else compare (P2.y p) (P2.y q)
 
-let extract_by_nodes (g: graph) nodes =
+let boundary_edges_by_nodes (g: graph) nodes =
   let nodes_in = node_set nodes in
   let i_inside = function
     | InnerTarget (n, _) -> MSet.mem n nodes_in
@@ -223,6 +391,9 @@ let extract_by_nodes (g: graph) nodes =
       (fun (i1, _) (i2, _) -> cmp_point (g#ipos i1) (g#ipos i2))
       !outputs
   in
+  nodes_in, inputs, outputs, !internals
+
+let extract_with_boundary (g: graph) nodes nodes_in inputs outputs internals =
   let find_index e l =
     let rec go k = function
       | [] -> None
@@ -237,7 +408,7 @@ let extract_by_nodes (g: graph) nodes =
         | Some s, _ -> MSet.add (Source s, o) acc
         | _, Some t -> MSet.add (i, Target t) acc
         | _ -> MSet.add (i, o) acc)
-      MSet.empty !internals
+      MSet.empty internals
   in
   let edges =
     List.fold_left
@@ -261,6 +432,44 @@ let extract_by_nodes (g: graph) nodes =
   h#update nodes_in edges;
   { subgraph = h; inputs; outputs; box = nodes_box nodes }
 
+let extract_by_nodes (g: graph) nodes =
+  let nodes_in, inputs, outputs, internals = boundary_edges_by_nodes g nodes in
+  extract_with_boundary g nodes nodes_in inputs outputs internals
+
+let reorder_by_perm l perm = List.map (List.nth l) perm
+
+let extract_by_nodes_permutation (g: graph) nodes input_perm output_perm =
+  let nodes_in, inputs, outputs, internals = boundary_edges_by_nodes g nodes in
+  let inputs = reorder_by_perm inputs input_perm in
+  let outputs = reorder_by_perm outputs output_perm in
+  extract_with_boundary g nodes nodes_in inputs outputs internals
+
+let rec insert_everywhere x = function
+  | [] -> [[x]]
+  | y :: ys as l -> (x :: l) :: List.map (fun zs -> y :: zs) (insert_everywhere x ys)
+
+let rec permutations = function
+  | [] -> [[]]
+  | x :: xs -> List.concat_map (insert_everywhere x) (permutations xs)
+
+let permutations_small l =
+  if List.length l > 5 then [l] else permutations l
+
+let extraction_candidates_by_nodes (g: graph) nodes =
+  let nodes_in, inputs, outputs, internals = boundary_edges_by_nodes g nodes in
+  let indexed_inputs = List.mapi (fun i e -> i, e) inputs in
+  let indexed_outputs = List.mapi (fun i e -> i, e) outputs in
+  let variants =
+    permutations_small indexed_inputs
+    |> List.concat_map (fun input_order ->
+           permutations_small indexed_outputs
+           |> List.map (fun output_order ->
+                  let input_perm, inputs = List.split input_order in
+                  let output_perm, outputs = List.split output_order in
+                  { input_perm; inputs; output_perm; outputs }))
+  in
+  nodes_in, internals, variants
+
 let layout_replacement_into_box repl dst =
     let src = repl#box in
   if not (Box2.is_empty src || Box2.is_empty dst) then (
@@ -278,10 +487,10 @@ let layout_replacement_into_box repl dst =
     MSet.iter (fun n -> n#move (map n#pos)) repl#nodes
   )
 
-let splice_by_nodes st graph_id selected_ids repl =
+let splice_by_nodes st graph_id selected_ids input_perm output_perm repl =
   let target = graph_by_id st graph_id in
   let nodes = selected_nodes st graph_id selected_ids in
-  let ex = extract_by_nodes target nodes in
+  let ex = extract_by_nodes_permutation target nodes input_perm output_perm in
   let repl = Graph.copy st.env repl in
   layout_replacement_into_box repl ex.box;
   let node_is_selected n = List.exists ((==) n) nodes in
@@ -335,9 +544,9 @@ let find_rule_match st graph_id name selected_ids polygon_opt =
        in
        let lsig = gsig l in
        let rsig = gsig r in
-       let ex = extract_by_nodes probe nodes in
-       attempts := 1;
+       let default_ex = extract_by_nodes target nodes in
        let failure () =
+         let h = default_ex.subgraph in
          Error
            (Printf.sprintf
               "rule not applicable [graph=%s sel=%d ids=[%s] supplied_polygon=%b pat=%d/%d attempts=%d set_miss=%d iso_miss=%d cut_fail=%d exn=%d %s patterns=(%s|%s)]"
@@ -352,30 +561,44 @@ let find_rule_match st graph_id name selected_ids polygon_opt =
               !iso_miss
               !cut_fail
               !exn_fail
-              !sig_note
+              (if !sig_note = "" then
+                 Printf.sprintf "captured=%s captured_pp=%S lhs_pp=%S rhs_pp=%S"
+                   (gsig h) (gpp h) (gpp l) (gpp r)
+               else !sig_note)
               lsig
               rsig)
        in
-       let h = ex.subgraph in
-       if same_node_set nodes h#nodes && Graph.iso h l then
-         Ok { rw = name; repl = r }
-       else if same_node_set nodes h#nodes && Graph.iso h r then
-         Ok { rw = "-" ^ name; repl = l }
-       else if same_node_set nodes h#nodes then (
-          iso_miss := !iso_miss + 1;
-          sig_note := Printf.sprintf "captured=%s captured_pp=%S lhs_pp=%S rhs_pp=%S"
-                        (gsig h) (gpp h) (gpp l) (gpp r);
-          failure ()
-       ) else (
-          set_miss := !set_miss + 1;
-          failure ()
-       )
+       let nodes_in, internals, variants = extraction_candidates_by_nodes probe nodes in
+       let rec try_variants = function
+         | [] -> failure ()
+         | variant :: rest ->
+            incr attempts;
+            let ex = extract_with_boundary probe nodes nodes_in variant.inputs variant.outputs internals in
+            let h = ex.subgraph in
+            if same_node_set nodes h#nodes && Graph.iso h l then
+              Ok { rw = name; repl = r; input_perm = variant.input_perm; output_perm = variant.output_perm }
+            else if same_node_set nodes h#nodes && Graph.iso h r then
+              Ok { rw = "-" ^ name; repl = l; input_perm = variant.input_perm; output_perm = variant.output_perm }
+            else if same_node_set nodes h#nodes then (
+              iso_miss := !iso_miss + 1;
+              if !sig_note = "" then
+                sig_note := Printf.sprintf "captured=%s captured_pp=%S lhs_pp=%S rhs_pp=%S"
+                              (gsig h) (gpp h) (gpp l) (gpp r);
+              try_variants rest
+            ) else (
+              set_miss := !set_miss + 1;
+              try_variants rest
+            )
+       in
+       try_variants variants
 
-let rule_names = ["mA"; "nA"; "mx"; "nx"]
+let safe_find_rule_match st graph_id name selected_ids polygon_opt =
+  try find_rule_match st graph_id name selected_ids polygon_opt with
+  | e -> Error (Printf.sprintf "rule check failed: %s" (Printexc.to_string e))
 
 let evaluate_selection st graph_id selected_ids polygon_opt =
   List.map (fun name ->
-      match find_rule_match st graph_id name selected_ids polygon_opt with
+      match safe_find_rule_match st graph_id name selected_ids polygon_opt with
       | Ok _ ->
          obj [
            "name", Js.Unsafe.inject (js_str name);
@@ -386,7 +609,46 @@ let evaluate_selection st graph_id selected_ids polygon_opt =
            "name", Js.Unsafe.inject (js_str name);
            "enabled", Js.Unsafe.inject Js._false;
            "reason", Js.Unsafe.inject (js_str msg)
-         ]) rule_names
+         ]) (rule_names st)
+
+let selection_obj graph_id selected_ids =
+  obj [
+    "graphId", Js.Unsafe.inject (js_str graph_id);
+    "selectedNodeIds", Js.Unsafe.inject (arr (List.map js_str selected_ids));
+    "polygon", Js.Unsafe.inject (arr []);
+    "cuts", Js.Unsafe.inject (arr []);
+    "cycleOrder", Js.Unsafe.inject (arr [])
+  ]
+
+let rec combinations k xs =
+  if k = 0 then [[]]
+  else
+    match xs with
+    | [] -> []
+    | x :: xs ->
+       List.map (fun ys -> x :: ys) (combinations (k - 1) xs) @ combinations k xs
+
+let selectable_sids st graph_id =
+  let g = graph_by_id st graph_id in
+  nodes_of_graph g
+  |> List.filter (fun n -> match n#kind with Var _ -> true | Box _ -> false)
+  |> List.filter_map (fun n -> Some (ensure_sid st n))
+
+let find_tutorial_step st =
+  let try_selection graph_id selected_ids =
+    rule_names st
+    |> List.find_map (fun name ->
+           match safe_find_rule_match st graph_id name selected_ids None with
+           | Ok _ -> Some (graph_id, selected_ids, name)
+           | Error _ -> None)
+  in
+  ["lhs"; "rhs"]
+  |> List.find_map (fun graph_id ->
+         let ids = selectable_sids st graph_id in
+         [1; 2; 3]
+         |> List.find_map (fun size ->
+                combinations size ids
+                |> List.find_map (try_selection graph_id)))
 
 let checkpoint st =
   st.undo <- (st.env, Graph.copy st.env st.lhs, Graph.copy st.env st.rhs, st.proof) :: st.undo;
@@ -399,7 +661,7 @@ let restore st (env,lhs,rhs,proof) =
   st.proof <- proof
 
 let rec apply_rule st graph_id name selected_ids polygon_opt =
-  match find_rule_match st graph_id name selected_ids polygon_opt with
+  match safe_find_rule_match st graph_id name selected_ids polygon_opt with
   | Error msg ->
      obj [
        "ok", Js.Unsafe.inject Js._false;
@@ -408,7 +670,7 @@ let rec apply_rule st graph_id name selected_ids polygon_opt =
   | Ok m ->
      checkpoint st;
      begin try
-        splice_by_nodes st graph_id selected_ids m.repl;
+        splice_by_nodes st graph_id selected_ids m.input_perm m.output_perm m.repl;
         let step = Printf.sprintf "rewrite %s (* %s *)." m.rw graph_id in
         st.proof <- st.proof @ [step];
         let done_eq = Graph.iso st.lhs st.rhs in
@@ -428,7 +690,7 @@ let rec apply_rule st graph_id name selected_ids polygon_opt =
 
 and snapshot_scene st =
   let hyp_rules =
-    rule_names
+    rule_names st
     |> List.filter_map (fun name ->
            match List.assoc_opt name (hyps st) with
            | None -> None
@@ -440,17 +702,59 @@ and snapshot_scene st =
                 ]))
   in
   obj [
-    "title", Js.Unsafe.inject (js_str "Double Fork Demo");
-    "subtitle", Js.Unsafe.inject (js_str "Lasso-select a region on either side, then tap a visual rule.");
+    "puzzleId", Js.Unsafe.inject (js_str st.puzzle.id);
+    "level", Js.Unsafe.inject (js_str st.puzzle.level);
+    "title", Js.Unsafe.inject (js_str st.puzzle.title);
+    "subtitle", Js.Unsafe.inject (js_str st.puzzle.subtitle);
     "graphs", Js.Unsafe.inject (arr [snapshot_graph st "lhs" st.lhs; snapshot_graph st "rhs" st.rhs]);
     "rules", Js.Unsafe.inject (arr hyp_rules);
     "messages", Js.Unsafe.inject (arr (List.map js_str st.messages));
     "proofLines", Js.Unsafe.inject (arr (List.map js_str st.proof))
   ]
 
-let init_demo _name =
-  let env, lhs, rhs = parse_state demo_state in
-  state_ref := { env; lhs; rhs; proof = []; messages = ["Demo loaded"]; undo = []; redo = []; sid_counter = 0 };
+let tutorial_demo name =
+  let requested = Js.to_string name in
+  let puzzle = puzzle_by_id requested in
+  let env, lhs, rhs = parse_puzzle_state puzzle.source in
+  let st = { puzzle; env; lhs; rhs; proof = []; messages = [Printf.sprintf "%s tutorial" puzzle.level]; undo = []; redo = []; sid_counter = 0 } in
+  let initial = snapshot_scene st in
+  match find_tutorial_step st with
+  | None ->
+     obj [
+       "ok", Js.Unsafe.inject Js._false;
+       "error", Js.Unsafe.inject (js_str "No tutorial rewrite found")
+     ]
+  | Some (graph_id, selected_ids, rule_name) ->
+     let result = apply_rule st graph_id rule_name selected_ids None in
+     obj [
+       "ok", Js.Unsafe.inject Js._true;
+       "initialScene", Js.Unsafe.inject initial;
+       "selection", Js.Unsafe.inject (selection_obj graph_id selected_ids);
+       "ruleName", Js.Unsafe.inject (js_str rule_name);
+       "result", Js.Unsafe.inject result
+     ]
+
+let snapshot_puzzle p =
+  obj [
+    "id", Js.Unsafe.inject (js_str p.id);
+    "level", Js.Unsafe.inject (js_str p.level);
+    "title", Js.Unsafe.inject (js_str p.title);
+    "subtitle", Js.Unsafe.inject (js_str p.subtitle)
+  ]
+
+let list_demos () = arr (List.map snapshot_puzzle puzzles)
+
+let init_demo name =
+  let requested = Js.to_string name in
+  let puzzle = puzzle_by_id requested in
+  let env, lhs, rhs = parse_puzzle_state puzzle.source in
+  let messages =
+    if requested <> "" && requested <> puzzle.id then
+      [Printf.sprintf "Unknown puzzle %S; loaded %s instead." requested puzzle.level]
+    else
+      [Printf.sprintf "%s loaded" puzzle.level]
+  in
+  state_ref := { puzzle; env; lhs; rhs; proof = []; messages; undo = []; redo = []; sid_counter = 0 };
   snapshot_scene !state_ref
 
 let get_scene () = snapshot_scene !state_ref
@@ -523,6 +827,8 @@ let _ =
   Js.export "StringDiagramsBridge"
     (obj [
          "init_demo", Js.Unsafe.inject (Js.wrap_callback init_demo);
+         "list_demos", Js.Unsafe.inject (Js.wrap_callback list_demos);
+         "tutorial_demo", Js.Unsafe.inject (Js.wrap_callback tutorial_demo);
          "get_scene", Js.Unsafe.inject (Js.wrap_callback get_scene);
          "evaluate_selection", Js.Unsafe.inject (Js.wrap_callback evaluate_selection_js);
          "apply_rule", Js.Unsafe.inject (Js.wrap_callback apply_rule_js);

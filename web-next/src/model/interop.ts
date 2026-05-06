@@ -1,4 +1,4 @@
-export type RuleName = 'mA' | 'nA' | 'mx' | 'nx';
+export type RuleName = string;
 
 export type ScenePoint = {
   x: number;
@@ -17,6 +17,13 @@ export type SceneNode = {
   y1: number;
   nsources: number;
   ntargets: number;
+  sourceTypes: string[];
+  targetTypes: string[];
+  visual: {
+    shape?: string;
+    radius?: number;
+    size?: ScenePoint;
+  };
   color: string;
   selectable: boolean;
 };
@@ -32,7 +39,7 @@ export type SceneEdge = {
   id: string;
   from: PortRef;
   to: PortRef;
-  curve: ScenePoint[];
+  curve?: ScenePoint[];
   color: string;
 };
 
@@ -45,6 +52,8 @@ export type SceneGraph = {
 };
 
 export type SceneState = {
+  puzzleId: string;
+  level: string;
   title: string;
   subtitle: string;
   graphs: SceneGraph[];
@@ -84,4 +93,20 @@ export type ApplyResult = {
   scene?: SceneState;
   proofDelta?: string[];
   error?: string;
+};
+
+export type TutorialDemo = {
+  ok: boolean;
+  initialScene?: SceneState;
+  selection?: SelectionDescriptor;
+  ruleName?: string;
+  result?: ApplyResult;
+  error?: string;
+};
+
+export type PuzzleInfo = {
+  id: string;
+  level: string;
+  title: string;
+  subtitle: string;
 };
