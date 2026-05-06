@@ -1,8 +1,8 @@
 import './style.css';
-import { OcamlAdapter, RULE_ORDER } from './engine/ocamlAdapter';
+import { OcamlAdapter } from './engine/ocamlAdapter';
 import { type LayoutGraph, type LayoutNode, type LayoutPoint } from './layout/layoutTypes';
-import { layoutSceneGraph } from './layout/physicsLayout';
-import type { RuleAvailability, SceneState, SelectionDescriptor } from './model/interop';
+import { animateSceneGraphLayout, layoutSceneGraph, type LayoutSeed } from './layout/physicsLayout';
+import type { PuzzleInfo, RuleAvailability, SceneState, SelectionDescriptor } from './model/interop';
 
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -13,15 +13,25 @@ type LayoutState = {
   rules: Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>;
 };
 
+const DEFAULT_PUZZLE_ID = 'composite-monad-left-unit';
+
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app root');
 
 app.innerHTML = `
   <header class="topbar">
     <div class="left">
+      <label class="level-menu" aria-label="Choose puzzle level">
+        <span>Level</span>
+        <select id="level-actions"></select>
+      </label>
       <button class="btn" data-action="reset">Reset</button>
-      <button class="btn icon-btn" data-action="undo" aria-label="Undo">↶</button>
-      <button class="btn icon-btn" data-action="redo" aria-label="Redo">↷</button>
+      <button class="btn icon-btn" data-action="undo" aria-label="Undo">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
+      </button>
+      <button class="btn icon-btn" data-action="redo" aria-label="Redo">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3"/></svg>
+      </button>
     </div>
     <div class="hint" id="subtitle">
       <span class="dot"></span>
@@ -34,8 +44,8 @@ app.innerHTML = `
       <span class="stage-label">Puzzle</span>
       <canvas id="stage" aria-label="diagram stage"></canvas>
     </div>
-    <canvas id="confetti-canvas"></canvas>
     <div id="success-modal" role="dialog" aria-modal="true" aria-labelledby="success-title">
+      <canvas id="confetti-canvas"></canvas>
       <div class="modal">
         <div class="modal-check" aria-hidden="true">✓</div>
         <div class="modal-title" id="success-title">You untangled it!</div>
@@ -46,6 +56,7 @@ app.innerHTML = `
         <div class="modal-actions">
           <button class="btn" data-action="play-again">Play again</button>
           <button class="btn btn--primary" data-action="see-proof">See what you did</button>
+          <button class="btn btn--primary" data-action="next-level">Next level</button>
         </div>
       </div>
     </div>
@@ -74,27 +85,37 @@ app.innerHTML = `
         <p>The point: each move is checked by the proof engine. When the diagrams match, you made a proof.</p>
       </div>
     </div>
+    <div id="tutorial-panel" aria-live="polite">
+      <div class="tutorial-card">
+        <div class="proof-head">
+          <div>
+            <div class="proof-kicker">How to play</div>
+            <h2>A checked visual move</h2>
+          </div>
+          <button class="btn" data-action="close-tutorial">Close</button>
+        </div>
+        <p class="tutorial-copy">This mini-demo uses Level 1 in a sandbox. Your current puzzle is left untouched.</p>
+        <div class="tutorial-stage-wrap">
+          <canvas id="tutorial-stage" aria-label="tutorial diagram stage"></canvas>
+        </div>
+        <button class="rule tutorial-rule" id="tutorial-rule-card" type="button">
+          <div class="rule-meta"><span class="rule-badge">Move</span><span class="rule-name">checked rule</span></div>
+          <canvas class="tutorial-rule-preview" id="tutorial-rule-preview" width="260" height="96"></canvas>
+        </button>
+      </div>
+    </div>
   </main>
+  <div class="tut-caption" id="tutorial-caption">Circle a real rewrite</div>
+  <div class="tut-finger" id="tutorial-finger" aria-hidden="true">
+    <svg viewBox="0 0 56 64">
+      <ellipse cx="28" cy="28" rx="16" ry="20" fill="rgba(255,255,255,.88)" stroke="rgba(20,30,45,.55)" stroke-width="1.4"/>
+      <ellipse cx="24" cy="22" rx="5" ry="8" fill="rgba(255,255,255,.96)"/>
+    </svg>
+  </div>
+  <div class="tut-ripple" id="tutorial-ripple"></div>
   <footer class="dock">
     <div class="dock-label">Moves</div>
-    <div class="rules" id="rules">
-      <button class="rule" data-action="rule" data-rule-id="R1" disabled>
-        <div class="rule-meta"><span class="rule-badge">R1</span><span class="rule-name">untwist</span></div>
-        <canvas class="rule-preview" data-rule-preview="R1" width="170" height="58"></canvas>
-      </button>
-      <button class="rule" data-action="rule" data-rule-id="R2" disabled>
-        <div class="rule-meta"><span class="rule-badge">R2</span><span class="rule-name">absorb</span></div>
-        <canvas class="rule-preview" data-rule-preview="R2" width="170" height="58"></canvas>
-      </button>
-      <button class="rule" data-action="rule" data-rule-id="R3" disabled>
-        <div class="rule-meta"><span class="rule-badge">R3</span><span class="rule-name">split</span></div>
-        <canvas class="rule-preview" data-rule-preview="R3" width="170" height="58"></canvas>
-      </button>
-      <button class="rule" data-action="rule" data-rule-id="R4" disabled>
-        <div class="rule-meta"><span class="rule-badge">R4</span><span class="rule-name">slide</span></div>
-        <canvas class="rule-preview" data-rule-preview="R4" width="170" height="58"></canvas>
-      </button>
-    </div>
+    <div class="rules" id="rules"></div>
     <div class="move-counter" data-move-counter>
       <b id="move-count">0</b> moves<br/>
       <span>so far</span>
@@ -110,19 +131,37 @@ const moveCounter = document.querySelector<HTMLElement>('[data-move-counter]');
 const successModal = document.querySelector<HTMLElement>('#success-modal');
 const proofPanel = document.querySelector<HTMLElement>('#proof-panel');
 const helpPanel = document.querySelector<HTMLElement>('#help-panel');
+const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
+const tutorialCanvas = document.querySelector<HTMLCanvasElement>('#tutorial-stage');
+const tutorialRuleCard = document.querySelector<HTMLButtonElement>('#tutorial-rule-card');
+const tutorialRulePreview = document.querySelector<HTMLCanvasElement>('#tutorial-rule-preview');
 const confettiCanvas = document.querySelector<HTMLCanvasElement>('#confetti-canvas');
-const ruleButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-action="rule"]'));
-if (!canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel || !confettiCanvas || ruleButtons.length !== RULE_ORDER.length) {
+const tutorialCaption = document.querySelector<HTMLElement>('#tutorial-caption');
+const tutorialFinger = document.querySelector<HTMLElement>('#tutorial-finger');
+const tutorialRipple = document.querySelector<HTMLElement>('#tutorial-ripple');
+const levelActions = document.querySelector<HTMLSelectElement>('#level-actions');
+const rulesContainer = document.querySelector<HTMLElement>('#rules');
+if (
+  !canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel || !tutorialPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !confettiCanvas ||
+  !tutorialCaption || !tutorialFinger || !tutorialRipple ||
+  !levelActions || !rulesContainer
+) {
   throw new Error('Missing required UI element');
 }
 const ctx = canvas.getContext('2d');
 if (!ctx) throw new Error('2D context unavailable');
+const tutorialCtx = tutorialCanvas.getContext('2d');
+if (!tutorialCtx) throw new Error('Tutorial 2D context unavailable');
 
-const adapter = new OcamlAdapter('double-fork');
+const adapter = new OcamlAdapter(DEFAULT_PUZZLE_ID);
+const puzzles = adapter.listDemos();
 let scene: SceneState = adapter.getScene();
 let layouts: LayoutState | null = null;
 let layoutEpoch = 0;
-let rules: RuleAvailability[] = RULE_ORDER.map((name) => ({ name, enabled: false, reason: 'No selection' }));
+let activePuzzleId = scene.puzzleId || DEFAULT_PUZZLE_ID;
+const disabledRulesFor = (s: SceneState, reason = 'No selection'): RuleAvailability[] =>
+  s.rules.map((rule) => ({ name: rule.name, enabled: false, reason }));
+let rules: RuleAvailability[] = disabledRulesFor(scene);
 
 const emptySelection = (): SelectionDescriptor => ({
   graphId: 'lhs',
@@ -139,15 +178,32 @@ let zoom = 1;
 let moveCount = 0;
 let proofOpen = false;
 let successOpen = false;
+let renderedLevelsKey = '';
+let renderedRulesKey = '';
+let layoutStopRequested = false;
+let tutorialRunning = false;
+let tutorialAbort: AbortController | null = null;
+
+// Tutorial lasso tuning: decrease this if the ghost lasso catches nearby nodes,
+// increase it if the lasso feels too tight around the highlighted rewrite.
+const TUTORIAL_LASSO_PAD = 16;
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const t = window.setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      window.clearTimeout(t);
+      reject(new Error('tutorial aborted'));
+    }, { once: true });
+  });
 
 const cssVar = (name: string, fallback: string) => {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
 };
-
-const ruleNameForId = (id: string) => RULE_ORDER[Number(id.replace(/^R/, '')) - 1];
 
 const resetShellState = () => {
   moveCount = 0;
@@ -158,7 +214,43 @@ const resetShellState = () => {
   successModal.removeAttribute('data-open');
   proofPanel.removeAttribute('data-open');
   helpPanel.removeAttribute('data-open');
+  tutorialPanel.removeAttribute('data-open');
 };
+
+const stopTutorial = () => {
+  if (!tutorialRunning) return;
+  tutorialRunning = false;
+  tutorialAbort?.abort();
+  tutorialAbort = null;
+  document.body.classList.remove('tut-on');
+  tutorialPanel.removeAttribute('data-open');
+  tutorialRuleCard.classList.remove('tut-hot', 'tut-pressed');
+  document.querySelectorAll('.rule.tut-hot, .rule.tut-pressed').forEach((el) => el.classList.remove('tut-hot', 'tut-pressed'));
+  tutorialFinger.style.transform = 'translate(-120px, -120px)';
+};
+
+const invalidateRuleDock = () => {
+  renderedRulesKey = '';
+};
+
+const nextPuzzleId = () => {
+  const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
+  if (idx < 0 || puzzles.length === 0) return DEFAULT_PUZZLE_ID;
+  return puzzles[(idx + 1) % puzzles.length].id;
+};
+
+const loadPuzzle = (puzzleId: string) => {
+  stopTutorial();
+  layoutStopRequested = true;
+  releaseLayoutStep();
+  activePuzzleId = puzzleId;
+  resetShellState();
+  clearSelection();
+  setScene(adapter.reset(puzzleId));
+  render();
+};
+
+const releaseLayoutStep = () => {};
 
 const bumpMoves = () => {
   moveCount += 1;
@@ -169,52 +261,100 @@ const bumpMoves = () => {
 const fireConfetti = () => {
   const c = confettiCanvas.getContext('2d');
   if (!c) return;
-  const rect = confettiCanvas.getBoundingClientRect();
+  const width = Math.max(window.innerWidth, document.documentElement.clientWidth || 0, 1);
+  const height = Math.max(window.innerHeight, document.documentElement.clientHeight || 0, 1);
   const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
-  confettiCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  confettiCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  confettiCanvas.width = Math.floor(width * dpr);
+  confettiCanvas.height = Math.floor(height * dpr);
+  confettiCanvas.style.width = `${width}px`;
+  confettiCanvas.style.height = `${height}px`;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   const colors = [cssVar('--accent', '#3b73c4'), cssVar('--node-x', '#6fa86a'), cssVar('--strand-b', '#6e3a5e'), cssVar('--strand-a', '#2f7a6e')];
-  const bits = Array.from({ length: 95 }, () => ({
-    x: rect.width * 0.5 + (Math.random() - 0.5) * 90,
-    y: rect.height * 0.42 + (Math.random() - 0.5) * 30,
-    vx: (Math.random() - 0.5) * 7,
-    vy: -Math.random() * 6 - 2,
-    g: Math.random() * 0.18 + 0.1,
-    r: Math.random() * Math.PI,
-    vr: (Math.random() - 0.5) * 0.3,
-    size: Math.random() * 5 + 4,
-    color: colors[Math.floor(Math.random() * colors.length)],
-    life: Math.random() * 35 + 55
-  }));
+  const duration = 5200;
+  const started = Date.now();
+  let lastBurst = 0;
+  type ConfettiBit = {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    g: number;
+    r: number;
+    vr: number;
+    size: number;
+    color: string;
+    life: number;
+    maxLife: number;
+  };
+  const bits: ConfettiBit[] = [];
+  const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+  const burst = (originX: number, originY: number, count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      const angle = randomInRange(-Math.PI * 0.95, -Math.PI * 0.05);
+      const speed = randomInRange(2.4, 8.6);
+      const life = randomInRange(48, 82);
+      bits.push({
+        x: originX,
+        y: originY,
+        vx: Math.cos(angle) * speed + randomInRange(-0.8, 0.8),
+        vy: Math.sin(angle) * speed - randomInRange(0.4, 2.4),
+        g: randomInRange(0.09, 0.18),
+        r: Math.random() * Math.PI,
+        vr: randomInRange(-0.32, 0.32),
+        size: randomInRange(3.5, 8),
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life,
+        maxLife: life
+      });
+    }
+  };
   const tick = () => {
-    c.clearRect(0, 0, rect.width, rect.height);
-    let alive = false;
-    bits.forEach((bit) => {
+    const elapsed = Date.now() - started;
+    const timeLeft = Math.max(0, duration - elapsed);
+    if (elapsed - lastBurst > 220 && timeLeft > 0) {
+      lastBurst = elapsed;
+      const particleCount = Math.max(6, Math.floor(28 * (timeLeft / duration)));
+      burst(width * randomInRange(0.1, 0.3), height * randomInRange(-0.08, 0.1), particleCount);
+      burst(width * randomInRange(0.7, 0.9), height * randomInRange(-0.08, 0.1), particleCount);
+    }
+    c.clearRect(0, 0, width, height);
+    for (let i = bits.length - 1; i >= 0; i -= 1) {
+      const bit = bits[i];
       if (bit.life <= 0) return;
-      alive = true;
       bit.life -= 1;
       bit.x += bit.vx;
       bit.y += bit.vy;
       bit.vy += bit.g;
       bit.r += bit.vr;
+      if (bit.life <= 0 || bit.y > height + 40) {
+        bits.splice(i, 1);
+        continue;
+      }
       c.save();
       c.translate(bit.x, bit.y);
       c.rotate(bit.r);
       c.fillStyle = bit.color;
-      c.globalAlpha = Math.min(1, bit.life / 18);
+      c.globalAlpha = Math.min(1, bit.life / Math.min(22, bit.maxLife * 0.6));
       c.fillRect(-bit.size * 0.5, -bit.size * 0.5, bit.size, bit.size * 0.65);
       c.restore();
-    });
-    if (alive) requestAnimationFrame(tick);
-    else c.clearRect(0, 0, rect.width, rect.height);
+    }
+    if (timeLeft > 0 || bits.length > 0) requestAnimationFrame(tick);
+    else c.clearRect(0, 0, width, height);
   };
+  burst(width * 0.5, height * 0.28, 80);
   tick();
 };
 
 const showSuccess = () => {
   if (successOpen) return;
   successOpen = true;
+  const nextButton = successModal.querySelector<HTMLButtonElement>('[data-action="next-level"]');
+  const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
+  const hasNext = idx >= 0 && idx < puzzles.length - 1;
+  if (nextButton) {
+    nextButton.hidden = !hasNext;
+    nextButton.textContent = hasNext ? `Next: ${puzzles[idx + 1].level}` : 'Next level';
+  }
   successModal.setAttribute('data-open', 'true');
   fireConfetti();
 };
@@ -224,6 +364,109 @@ const showProof = () => {
   successModal.removeAttribute('data-open');
   proofPanel.setAttribute('data-open', 'true');
   proof.textContent = scene.proofLines.length ? scene.proofLines.join('\n') : 'No proof yet.';
+};
+
+const startTutorial = async () => {
+  stopTutorial();
+  tutorialRunning = true;
+  tutorialAbort = new AbortController();
+  const signal = tutorialAbort.signal;
+  document.body.classList.add('tut-on');
+  tutorialPanel.setAttribute('data-open', 'true');
+  tutorialCaption.textContent = 'Loading a tiny proof...';
+  tutorialFinger.style.transform = 'translate(-120px, -120px)';
+  try {
+    const demo = adapter.tutorialDemo(DEFAULT_PUZZLE_ID);
+    if (!demo.ok || !demo.initialScene || !demo.selection || !demo.ruleName || !demo.result?.scene) {
+      throw new Error(demo.error || 'Tutorial data is incomplete');
+    }
+    const initialLayouts = new Map(
+      await Promise.all(demo.initialScene.graphs.map(async (graph) => [graph.id, await layoutSceneGraph(graph)] as const))
+    );
+    const resultLayouts = new Map(
+      await Promise.all(demo.result.scene.graphs.map(async (graph) => [graph.id, await layoutSceneGraph(graph)] as const))
+    );
+    const ruleNameEl = tutorialRuleCard.querySelector<HTMLElement>('.rule-name');
+    if (ruleNameEl) ruleNameEl.textContent = demo.ruleName;
+    const tutorialRule = demo.initialScene.rules.find((rule) => rule.name === demo.ruleName);
+    if (tutorialRule) {
+      const previewLayouts = {
+        lhs: await layoutSceneGraph(tutorialRule.lhs),
+        rhs: await layoutSceneGraph(tutorialRule.rhs)
+      };
+      drawRulePreviewGraphs(tutorialRulePreview, previewLayouts, false);
+    }
+    const drawTutorial = (graphs: Map<string, LayoutGraph>, selected = new Set<string>(), path: Point[] = []) => {
+      const rect = tutorialCanvas.getBoundingClientRect();
+      const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+      tutorialCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      tutorialCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      tutorialCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      tutorialCtx.clearRect(0, 0, rect.width, rect.height);
+      const panels = panelsForSize(rect.width, rect.height);
+      const lhs = graphs.get('lhs');
+      const rhs = graphs.get('rhs');
+      if (lhs) drawLayoutGraphOn(tutorialCtx, lhs, panels.lhs, demo.selection?.graphId === 'lhs' ? selected : new Set());
+      if (rhs) drawLayoutGraphOn(tutorialCtx, rhs, panels.rhs, demo.selection?.graphId === 'rhs' ? selected : new Set());
+      drawPlainEquals(tutorialCtx, rect.width * 0.5, rect.height * 0.5, 26);
+      if (path.length > 1) {
+        tutorialCtx.beginPath();
+        tutorialCtx.moveTo(path[0].x, path[0].y);
+        path.slice(1).forEach((p) => tutorialCtx.lineTo(p.x, p.y));
+        tutorialCtx.closePath();
+        tutorialCtx.fillStyle = 'rgba(41, 128, 185, 0.14)';
+        tutorialCtx.strokeStyle = '#1f6da0';
+        tutorialCtx.lineWidth = 2.4;
+        tutorialCtx.fill();
+        tutorialCtx.stroke();
+      }
+      return panels;
+    };
+    const panels = drawTutorial(initialLayouts);
+    const selectedSet = new Set(demo.selection.selectedNodeIds);
+    const tutorialGraphId = demo.selection.graphId === 'rhs' ? 'rhs' : 'lhs';
+    const selectedLayout = initialLayouts.get(tutorialGraphId);
+    if (!selectedLayout) throw new Error('Tutorial selected graph is missing');
+    const path = lassoPathForSelection(demo.selection, panels[tutorialGraphId], selectedLayout);
+    tutorialCaption.textContent = 'Circle a tangle';
+    await fingerTo(tutorialCanvasPointToPage(path[0]), 500, signal);
+    tutorialFinger.style.transition = 'none';
+    const start = performance.now();
+    while (true) {
+      if (signal.aborted) throw new Error('tutorial aborted');
+      const t = clamp((performance.now() - start) / 1400, 0, 1);
+      const partial = interpolateClosedPath(path, t);
+      const head = partial[partial.length - 1] ?? path[0];
+      const pageHead = tutorialCanvasPointToPage(head);
+      tutorialFinger.style.transform = `translate(${pageHead.x}px, ${pageHead.y}px)`;
+      drawTutorial(initialLayouts, selectedSet, partial);
+      if (t >= 1) break;
+      await frame();
+    }
+    drawTutorial(initialLayouts, selectedSet, path);
+    await sleep(450, signal);
+    tutorialCaption.textContent = 'Pick a checked move';
+    tutorialRuleCard.classList.add('tut-hot');
+    const r = tutorialRuleCard.getBoundingClientRect();
+    const p = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+    await fingerTo(p, 850, signal);
+    fireTutorialRipple(p);
+    tutorialRuleCard.classList.add('tut-pressed');
+    await sleep(180, signal);
+    tutorialRuleCard.classList.remove('tut-pressed');
+    tutorialCaption.textContent = 'Watch the real rewrite';
+    drawTutorial(resultLayouts);
+    tutorialCaption.textContent = 'Every move was checked';
+    await sleep(1800, signal);
+  } catch (error) {
+    if (!signal.aborted) {
+      const message = error instanceof Error ? error.message : String(error);
+      scene.messages = ['Tutorial could not start.', message];
+      render();
+    }
+  } finally {
+    stopTutorial();
+  }
 };
 
 (window as unknown as {
@@ -236,7 +479,7 @@ const showProof = () => {
 }).PuzzleUI = {
   bumpMoves,
   setRuleEnabled: (id, enabled) => {
-    const el = document.querySelector<HTMLButtonElement>(`[data-rule-id="${id}"]`);
+    const el = document.querySelector<HTMLButtonElement>(`[data-rule-key="${id}"], [data-rule-name="${id}"]`);
     if (el) el.disabled = !enabled;
   },
   showSuccess,
@@ -275,6 +518,7 @@ const layoutScene = async (nextScene: SceneState) => {
       graphs: new Map(graphEntries),
       rules: new Map(ruleEntries)
     };
+    invalidateRuleDock();
   } catch (error) {
     if (epoch !== layoutEpoch) return;
     const message = error instanceof Error ? error.message : String(error);
@@ -283,8 +527,216 @@ const layoutScene = async (nextScene: SceneState) => {
   render();
 };
 
+const seedFromCurrentLayout = (selection: SelectionDescriptor): LayoutSeed | undefined => {
+  const graph = layouts?.graphs.get(selection.graphId);
+  if (!graph) return undefined;
+  const nodePositions = new Map<string, LayoutPoint>();
+  const selectedCenters: LayoutPoint[] = [];
+  graph.nodes.forEach((node) => {
+    if (node.boundary || node.modelX === undefined || node.modelY === undefined) return;
+    nodePositions.set(node.id, { x: node.modelX, y: node.modelY });
+    if (selection.selectedNodeIds.includes(node.id)) selectedCenters.push({ x: node.modelX, y: node.modelY });
+  });
+  const fallbackCenter = selectedCenters.length === 0
+    ? undefined
+    : {
+        x: selectedCenters.reduce((sum, p) => sum + p.x, 0) / selectedCenters.length,
+        y: selectedCenters.reduce((sum, p) => sum + p.y, 0) / selectedCenters.length
+      };
+  return { nodePositions, fallbackCenter };
+};
+
+const layoutCenterFromCurrentSelection = (selection: SelectionDescriptor): LayoutPoint | undefined => {
+  const graph = layouts?.graphs.get(selection.graphId);
+  if (!graph) return undefined;
+  const centers = graph.nodes
+    .filter((node) => selection.selectedNodeIds.includes(node.id) && !node.boundary)
+    .map((node) => ({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }));
+  if (centers.length === 0) return undefined;
+  return {
+    x: centers.reduce((sum, p) => sum + p.x, 0) / centers.length,
+    y: centers.reduce((sum, p) => sum + p.y, 0) / centers.length
+  };
+};
+
+const pointDistanceSq = (a: LayoutPoint, b: LayoutPoint) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+const lerpPoint = (a: LayoutPoint, b: LayoutPoint, t: number): LayoutPoint => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t
+});
+
+const replacementBloomGraph = (graph: LayoutGraph, center: LayoutPoint, progress: number, stableNodeIds: Set<string>): LayoutGraph => {
+  const stableCenters = new Map(
+    graph.nodes
+      .filter((node) => node.boundary || stableNodeIds.has(node.id))
+      .map((node) => [node.id, { x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }])
+  );
+  const nearStableNode = (p: LayoutPoint) => {
+    for (const stable of stableCenters.values()) {
+      if (pointDistanceSq(p, stable) < 36 ** 2) return true;
+    }
+    return false;
+  };
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      if (node.boundary || stableNodeIds.has(node.id)) return { ...node };
+      const nodeCenter = { x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 };
+      const nextCenter = lerpPoint(center, nodeCenter, progress);
+      return { ...node, x: nextCenter.x - node.w * 0.5, y: nextCenter.y - node.h * 0.5 };
+    }),
+    edges: graph.edges.map((edge) => {
+      const first = edge.points[0];
+      const last = edge.points[edge.points.length - 1];
+      const stableToStable = first && last && nearStableNode(first) && nearStableNode(last);
+      return {
+        ...edge,
+        points: stableToStable
+          ? edge.points.map((p) => ({ ...p }))
+          : edge.points.map((p) => (nearStableNode(p) ? { ...p } : lerpPoint(center, p, progress)))
+      };
+    })
+  };
+};
+
+const collapsedGraphForSelection = (graph: LayoutGraph, selection: SelectionDescriptor, progress: number): LayoutGraph => {
+  const selected = new Set(selection.selectedNodeIds);
+  const selectedNodes = graph.nodes.filter((node) => selected.has(node.id) && !node.boundary);
+  if (selectedNodes.length === 0) return graph;
+  const selectedCenters = selectedNodes.map((node) => ({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }));
+  const center = {
+    x: selectedCenters.reduce((sum, p) => sum + p.x, 0) / selectedCenters.length,
+    y: selectedCenters.reduce((sum, p) => sum + p.y, 0) / selectedCenters.length
+  };
+  const nearbySelectedCenter = (p: LayoutPoint) => {
+    let best = selectedCenters[0];
+    let bestD = pointDistanceSq(p, best);
+    for (let i = 1; i < selectedCenters.length; i += 1) {
+      const d = pointDistanceSq(p, selectedCenters[i]);
+      if (d < bestD) {
+        best = selectedCenters[i];
+        bestD = d;
+      }
+    }
+    return bestD < 36 ** 2 ? best : undefined;
+  };
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      if (!selected.has(node.id) || node.boundary) return { ...node };
+      const nodeCenter = { x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 };
+      const nextCenter = lerpPoint(nodeCenter, center, progress);
+      return { ...node, x: nextCenter.x - node.w * 0.5, y: nextCenter.y - node.h * 0.5 };
+    }),
+    edges: graph.edges.map((edge) => ({
+      ...edge,
+      points: edge.points.map((p) => (nearbySelectedCenter(p) ? lerpPoint(p, center, progress) : { ...p }))
+    }))
+  };
+};
+
+const animateSelectionCollapse = async (selection: SelectionDescriptor, durationMs = 260) => {
+  const sourceLayouts = layouts;
+  const graph = sourceLayouts?.graphs.get(selection.graphId);
+  if (!sourceLayouts || !graph || selection.selectedNodeIds.length === 0) return;
+  const epoch = ++layoutEpoch;
+  scene.messages = ['Collapsing the selected rewrite region...'];
+  const start = performance.now();
+  while (true) {
+    if (epoch !== layoutEpoch) return;
+    const t = clamp((performance.now() - start) / durationMs, 0, 1);
+    layouts = {
+      graphs: new Map(sourceLayouts.graphs).set(selection.graphId, collapsedGraphForSelection(graph, selection, easeInOutCubic(t))),
+      rules: sourceLayouts.rules
+    };
+    render();
+    if (t >= 1) break;
+    await frame();
+  }
+};
+
+const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?: LayoutSeed, collapseCenter?: LayoutPoint, selectedNodeIds = new Set<string>()) => {
+  const epoch = ++layoutEpoch;
+  const finalMessages = [...nextScene.messages];
+  scene = nextScene;
+  activePuzzleId = scene.puzzleId || activePuzzleId;
+  rules = disabledRulesFor(scene);
+  invalidateRuleDock();
+  layoutStopRequested = false;
+  const nextGraphs = new Map<string, LayoutGraph>();
+  const stableNodeIds = new Set(seed?.nodePositions?.keys() ?? []);
+  selectedNodeIds.forEach((id) => stableNodeIds.delete(id));
+  if (collapseCenter) {
+    const oldChanged = layouts?.graphs.get(graphId);
+    if (oldChanged) nextGraphs.set(graphId, oldChanged);
+  }
+  layouts = { graphs: nextGraphs, rules: new Map() };
+  scene.messages = ['Replaying checked rewrite...'];
+  render();
+  try {
+    const ruleEntries = await Promise.all(
+      nextScene.rules.map(async (rule) => [
+        rule.name,
+        { lhs: await layoutSceneGraph(rule.lhs), rhs: await layoutSceneGraph(rule.rhs) }
+      ] as const)
+    );
+    if (epoch !== layoutEpoch) return;
+    layouts.rules = new Map(ruleEntries);
+    invalidateRuleDock();
+    await Promise.all(
+      nextScene.graphs
+        .filter((graph) => graph.id !== graphId)
+        .map(async (graph) => {
+          nextGraphs.set(graph.id, await layoutSceneGraph(graph));
+        })
+    );
+    const changedGraph = nextScene.graphs.find((graph) => graph.id === graphId);
+    if (changedGraph) {
+      const finalLayout = await animateSceneGraphLayout(
+        changedGraph,
+        (layout, iteration) => {
+          if (epoch !== layoutEpoch) return;
+          if (collapseCenter && iteration === 0) {
+            nextGraphs.set(graphId, replacementBloomGraph(layout, collapseCenter, 0, stableNodeIds));
+          } else if (collapseCenter && iteration <= 30) {
+            nextGraphs.set(graphId, replacementBloomGraph(layout, collapseCenter, easeInOutCubic(iteration / 30), stableNodeIds));
+          } else {
+            nextGraphs.set(graphId, layout);
+          }
+          scene.messages = [`Replaying ${graphId}: physics iteration ${iteration}`];
+          render();
+        },
+        {
+          frameEvery: 3,
+          forceFrameUntil: collapseCenter ? 30 : 0,
+          maxIterations: 420,
+          frameDelayMs: 0,
+          seed,
+          shouldStop: () => layoutStopRequested || epoch !== layoutEpoch
+        }
+      );
+      if (epoch !== layoutEpoch) return;
+      nextGraphs.set(graphId, finalLayout);
+    }
+    scene.messages = finalMessages.length > 0 ? finalMessages : ['Rewrite replay finished.'];
+  } catch (error) {
+    if (epoch !== layoutEpoch) return;
+    const message = error instanceof Error ? error.message : String(error);
+    scene.messages = ['Rewrite animation failed.', message];
+    void layoutScene(nextScene);
+  } finally {
+    if (epoch === layoutEpoch) {
+      render();
+    }
+  }
+};
+
 const setScene = (nextScene: SceneState) => {
   scene = nextScene;
+  activePuzzleId = scene.puzzleId || activePuzzleId;
+  rules = disabledRulesFor(scene);
+  invalidateRuleDock();
   void layoutScene(scene);
 };
 
@@ -298,6 +750,28 @@ const viewForLayout = (g: LayoutGraph, panel: Rect, zoomFactor = zoom): View => 
     tx: panel.x + panel.w * 0.5 - (g.width * 0.5) * scale,
     ty: panel.y + panel.h * 0.5 - (g.height * 0.5) * scale
   };
+};
+
+const viewForLayoutScale = (g: LayoutGraph, panel: Rect, scale: number): View => ({
+  scale,
+  tx: panel.x + panel.w * 0.5 - (g.width * 0.5) * scale,
+  ty: panel.y + panel.h * 0.5 - (g.height * 0.5) * scale
+});
+
+const sharedViewScale = (graphs: LayoutGraph[], panel: Rect) => {
+  const pad = 18;
+  const w = Math.max(1, ...graphs.map((g) => g.width + pad * 2));
+  const h = Math.max(1, ...graphs.map((g) => g.height + pad * 2));
+  return Math.max(0.05, Math.min(panel.w / w, panel.h / h)) * zoom;
+};
+
+const previewViewForLayout = (g: LayoutGraph, panel: Rect, zoomFactor: number, allowHorizontalOverflow: boolean): View => {
+  const pad = 14;
+  const w = Math.max(1, g.width + pad * 2);
+  const h = Math.max(1, g.height + pad * 2);
+  const horizontalAllowance = allowHorizontalOverflow ? 2.2 : 1;
+  const scale = Math.max(0.05, Math.min((panel.w * horizontalAllowance) / w, panel.h / h)) * zoomFactor;
+  return viewForLayoutScale(g, panel, scale);
 };
 
 const toScreen = (p: LayoutPoint, v: View): Point => ({ x: p.x * v.scale + v.tx, y: p.y * v.scale + v.ty });
@@ -327,13 +801,17 @@ const strokeSmoothPolyline = (c: CanvasRenderingContext2D, points: Point[]) => {
 };
 
 const drawNode = (c: CanvasRenderingContext2D, node: LayoutNode, view: View, selected: Set<string>, preview = false) => {
-  const p = toScreen({ x: node.x, y: node.y }, view);
-  const w = Math.max(preview ? 5 : 22, node.w * view.scale * (preview ? 0.78 : 1));
-  const h = Math.max(preview ? 5 : 18, node.h * view.scale * (preview ? 0.78 : 1));
+  const center = toScreen({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }, view);
+  const minW = node.boundary ? (preview ? 4 : 8) : (preview ? 5 : 22);
+  const minH = node.boundary ? (preview ? 4 : 8) : (preview ? 5 : 18);
+  const w = Math.max(minW, node.w * view.scale * (preview ? 0.78 : 1));
+  const h = Math.max(minH, node.h * view.scale * (preview ? 0.78 : 1));
+  const p = { x: center.x - w * 0.5, y: center.y - h * 0.5 };
   if (node.boundary) {
     c.fillStyle = cssVar('--pin', '#9aa8b8');
     c.beginPath();
-    c.arc(p.x + w * 0.5, p.y + h * 0.5, Math.max(2, Math.min(w, h) * 0.33), 0, Math.PI * 2);
+    const r = Math.min(preview ? 2.4 : 3.4, Math.max(preview ? 1.5 : 2.2, Math.min(w, h) * 0.28));
+    c.arc(p.x + w * 0.5, p.y + h * 0.5, r, 0, Math.PI * 2);
     c.fill();
     return;
   }
@@ -341,7 +819,18 @@ const drawNode = (c: CanvasRenderingContext2D, node: LayoutNode, view: View, sel
   c.fillStyle = node.color || '#7f8c8d';
   c.strokeStyle = isSel ? cssVar('--accent', '#3b73c4') : '#243949';
   c.lineWidth = preview ? 0.75 : isSel ? 3.2 : 1.6;
-  roundedRectPath(c, p.x, p.y, w, h, preview ? 2 : 6);
+  if (node.shape === 'circle' || node.shape === 'cross') {
+    c.beginPath();
+    c.arc(p.x + w * 0.5, p.y + h * 0.5, Math.max(w, h) * 0.5, 0, Math.PI * 2);
+  } else if (node.shape === 'triangle') {
+    c.beginPath();
+    c.moveTo(p.x, p.y);
+    c.lineTo(p.x + w, p.y);
+    c.lineTo(p.x + w * 0.5, p.y + h);
+    c.closePath();
+  } else {
+    roundedRectPath(c, p.x, p.y, w, h, preview ? 2 : 6);
+  }
   c.fill();
   c.stroke();
   if (!preview) {
@@ -349,31 +838,55 @@ const drawNode = (c: CanvasRenderingContext2D, node: LayoutNode, view: View, sel
     c.font = '700 12px Menlo, Consolas, monospace';
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText(node.label, p.x + w * 0.5, p.y + h * 0.5 + 0.5);
+    const labelY = node.shape === 'triangle' ? p.y + h * 0.42 : p.y + h * 0.5 + 0.5;
+    c.fillText(node.label, p.x + w * 0.5, labelY);
   }
 };
 
-const drawLayoutGraph = (g: LayoutGraph, panel: Rect, selected: Set<string>) => {
-  const view = viewForLayout(g, panel);
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#d4deea';
-  ctx.lineWidth = 1.2;
-  roundedRectPath(ctx, panel.x, panel.y, panel.w, panel.h, 14);
-  ctx.fill();
-  ctx.stroke();
+const drawQuestionEquals = (c: CanvasRenderingContext2D, x: number, y: number, size = 34) => {
+  c.save();
+  c.fillStyle = '#47607a';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = `650 ${size}px "Avenir Next", sans-serif`;
+  c.fillText('=', x, y + size * 0.08);
+  c.font = `700 ${Math.max(15, size * 0.56)}px "Avenir Next", sans-serif`;
+  c.fillText('?', x, y - size * 0.48);
+  c.restore();
+};
 
-  ctx.save();
-  roundedRectPath(ctx, panel.x, panel.y, panel.w, panel.h, 14);
-  ctx.clip();
+const drawPlainEquals = (c: CanvasRenderingContext2D, x: number, y: number, size = 28) => {
+  c.save();
+  c.fillStyle = '#47607a';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = `900 ${size}px "Avenir Next", sans-serif`;
+  c.fillText('=', x, y);
+  c.restore();
+};
+
+const drawLayoutGraphOn = (c: CanvasRenderingContext2D, g: LayoutGraph, panel: Rect, selected: Set<string>, view = viewForLayout(g, panel)) => {
+  c.fillStyle = '#ffffff';
+  c.strokeStyle = '#d4deea';
+  c.lineWidth = 1.2;
+  roundedRectPath(c, panel.x, panel.y, panel.w, panel.h, 14);
+  c.fill();
+  c.stroke();
+
+  c.save();
+  roundedRectPath(c, panel.x, panel.y, panel.w, panel.h, 14);
+  c.clip();
   g.edges.forEach((edge) => {
-    ctx.strokeStyle = edge.color || '#2f4f67';
-    ctx.lineWidth = 2;
-    strokeSmoothPolyline(ctx, edge.points.map((p) => toScreen(p, view)));
+    c.strokeStyle = edge.color || '#2f4f67';
+    c.lineWidth = 2.8;
+    strokeSmoothPolyline(c, edge.points.map((p) => toScreen(p, view)));
   });
-  g.nodes.forEach((node) => drawNode(ctx, node, view, selected));
-  ctx.restore();
+  g.nodes.forEach((node) => drawNode(c, node, view, selected));
+  c.restore();
   return view;
 };
+
+const drawLayoutGraph = (g: LayoutGraph, panel: Rect, selected: Set<string>, view?: View) => drawLayoutGraphOn(ctx, g, panel, selected, view);
 
 const drawPendingGraph = (panel: Rect) => {
   ctx.fillStyle = '#ffffff';
@@ -397,9 +910,70 @@ const drawLasso = () => {
   if (!dragging) ctx.closePath();
   ctx.fillStyle = 'rgba(41, 128, 185, 0.15)';
   ctx.strokeStyle = '#1f6da0';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.4;
   ctx.fill();
   ctx.stroke();
+};
+
+const fingerTo = async (p: Point, ms = 700, signal?: AbortSignal) => {
+  tutorialFinger.style.transition = `transform ${ms}ms cubic-bezier(.45,.05,.2,1)`;
+  tutorialFinger.style.transform = `translate(${p.x}px, ${p.y}px)`;
+  await sleep(ms + 40, signal);
+};
+
+const tutorialCanvasPointToPage = (p: Point): Point => {
+  const rect = tutorialCanvas.getBoundingClientRect();
+  return { x: rect.left + p.x, y: rect.top + p.y };
+};
+
+const fireTutorialRipple = (p: Point) => {
+  tutorialRipple.style.left = `${p.x}px`;
+  tutorialRipple.style.top = `${p.y}px`;
+  tutorialRipple.classList.remove('tut-firing');
+  void tutorialRipple.offsetWidth;
+  tutorialRipple.classList.add('tut-firing');
+};
+
+const interpolateClosedPath = (points: Point[], t: number) => {
+  const segments = points.map((p, idx) => [p, points[(idx + 1) % points.length]] as const);
+  const scaled = clamp(t, 0, 1) * segments.length;
+  const whole = Math.floor(scaled);
+  const frac = scaled - whole;
+  const out: Point[] = [points[0]];
+  for (let i = 0; i < Math.min(whole, segments.length); i += 1) out.push(segments[i][1]);
+  if (whole < segments.length) {
+    const [a, b] = segments[whole];
+    out.push({ x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac });
+  }
+  return out;
+};
+
+const lassoPathForSelection = (selection: SelectionDescriptor, panel: Rect, layout: LayoutGraph) => {
+  const view = viewForLayout(layout, panel);
+  const selected = new Set(selection.selectedNodeIds);
+  const selectedNodes = layout.nodes.filter((n) => selected.has(n.id));
+  const xs: number[] = [];
+  const ys: number[] = [];
+  selectedNodes.forEach((node) => {
+    const a = toScreen({ x: node.x, y: node.y }, view);
+    const b = toScreen({ x: node.x + node.w, y: node.y + node.h }, view);
+    xs.push(a.x, b.x);
+    ys.push(a.y, b.y);
+  });
+  if (xs.length === 0) return [];
+  const pad = TUTORIAL_LASSO_PAD;
+  const x0 = Math.max(panel.x + 10, Math.min(...xs) - pad);
+  const x1 = Math.min(panel.x + panel.w - 10, Math.max(...xs) + pad);
+  const y0 = Math.max(panel.y + 10, Math.min(...ys) - pad);
+  const y1 = Math.min(panel.y + panel.h - 10, Math.max(...ys) + pad);
+  const cx = (x0 + x1) * 0.5;
+  return [
+    { x: cx, y: y0 },
+    { x: x1, y: y0 + (y1 - y0) * 0.22 },
+    { x: x1 - (x1 - x0) * 0.1, y: y1 },
+    { x: x0 + (x1 - x0) * 0.08, y: y1 - (y1 - y0) * 0.12 },
+    { x: x0, y: y0 + (y1 - y0) * 0.25 }
+  ];
 };
 
 const pointInPolygon = (p: Point, poly: Point[]) => {
@@ -421,13 +995,22 @@ const nodeHitByLasso = (node: LayoutNode, view: View, poly: Point[]) => {
   const y0 = node.y;
   const x1 = node.x + node.w;
   const y1 = node.y + node.h;
-  const pts = [
-    { x: (x0 + x1) * 0.5, y: (y0 + y1) * 0.5 },
-    { x: x0, y: y0 },
-    { x: x0, y: y1 },
-    { x: x1, y: y0 },
-    { x: x1, y: y1 }
-  ];
+  const pts = node.shape === 'triangle'
+    ? [
+        { x: x0, y: y0 },
+        { x: x1, y: y0 },
+        { x: (x0 + x1) * 0.5, y: y1 },
+        { x: (x0 + x1) * 0.5, y: (y0 + y1) * 0.55 }
+      ]
+    : node.shape === 'circle' || node.shape === 'cross'
+      ? [{ x: (x0 + x1) * 0.5, y: (y0 + y1) * 0.5 }]
+      : [
+          { x: (x0 + x1) * 0.5, y: (y0 + y1) * 0.5 },
+          { x: x0, y: y0 },
+          { x: x0, y: y1 },
+          { x: x1, y: y0 },
+          { x: x1, y: y1 }
+        ];
   return pts.some((p) => pointInPolygon(toScreen(p, view), poly));
 };
 
@@ -445,13 +1028,13 @@ const evaluateSelection = (panels: PanelMap) => {
   }
   if (lasso.length < 3) {
     currentSelection = emptySelection();
-    rules = RULE_ORDER.map((name) => ({ name, enabled: false, reason: 'Select a sub-diagram' }));
+    rules = disabledRulesFor(scene, 'Select a sub-diagram');
     return;
   }
   const graphId = pickGraphFromLasso(panels);
   if (!graphId) {
     currentSelection = emptySelection();
-    rules = RULE_ORDER.map((name) => ({ name, enabled: false, reason: 'Select either side' }));
+    rules = disabledRulesFor(scene, 'Select either side');
     return;
   }
   const layout = layouts.graphs.get(graphId);
@@ -474,31 +1057,128 @@ const evaluateSelection = (panels: PanelMap) => {
   }
 };
 
-const drawGraphPreview = (c: CanvasRenderingContext2D, g: LayoutGraph, panel: Rect) => {
-  const view = viewForLayout(g, panel, 0.94);
+const spreadPreviewUnitTriangles = (g: LayoutGraph): LayoutGraph => {
+  const unitTriangles = g.nodes.filter((node) => !node.boundary && node.shape === 'triangle' && node.inputs === 0);
+  if (unitTriangles.length < 2) return g;
+
+  const shifts = new Map<string, number>();
+  const byBand = new Map<number, LayoutNode[]>();
+  unitTriangles.forEach((node) => {
+    const centerY = node.y + node.h * 0.5;
+    const band = Math.round(centerY / 36);
+    const bucket = byBand.get(band) ?? [];
+    bucket.push(node);
+    byBand.set(band, bucket);
+  });
+
+  byBand.forEach((bucket) => {
+    if (bucket.length < 2) return;
+    bucket.sort((a, b) => (a.x + a.w * 0.5) - (b.x + b.w * 0.5) || a.id.localeCompare(b.id));
+    const centers = bucket.map((node) => node.x + node.w * 0.5);
+    const center = centers.reduce((sum, x) => sum + x, 0) / centers.length;
+    const currentGap = bucket.length > 1 ? (centers[centers.length - 1] - centers[0]) / (bucket.length - 1) : 0;
+    const gap = Math.max(90, currentGap);
+    bucket.forEach((node, idx) => {
+      const nextCenter = center + (idx - (bucket.length - 1) * 0.5) * gap;
+      shifts.set(node.id, nextCenter - (node.x + node.w * 0.5));
+    });
+  });
+
+  if (shifts.size === 0) return g;
+
+  const nodes = g.nodes.map((node) => {
+    const dx = shifts.get(node.id) ?? 0;
+    return dx === 0 ? { ...node } : { ...node, x: node.x + dx };
+  });
+  const edges = g.edges.map((edge) => {
+    const points = edge.points.map((point) => ({ ...point }));
+    shifts.forEach((dx, nodeId) => {
+      if (edge.id.startsWith(`${nodeId}:`)) {
+        points[0].x += dx;
+        if (points[1]) points[1].x += dx;
+      }
+      if (edge.id.includes(`->${nodeId}:`)) {
+        points[points.length - 1].x += dx;
+        if (points[points.length - 2]) points[points.length - 2].x += dx;
+      }
+    });
+    return { ...edge, points };
+  });
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  const see = (point: LayoutPoint) => {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  };
+  nodes.forEach((node) => {
+    see({ x: node.x, y: node.y });
+    see({ x: node.x + node.w, y: node.y + node.h });
+  });
+  edges.forEach((edge) => edge.points.forEach(see));
+  const pad = 8;
+  const dx = pad - minX;
+  const dy = pad - minY;
+  return {
+    ...g,
+    width: maxX - minX + pad * 2,
+    height: maxY - minY + pad * 2,
+    nodes: nodes.map((node) => ({ ...node, x: node.x + dx, y: node.y + dy })),
+    edges: edges.map((edge) => ({ ...edge, points: edge.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) }))
+  };
+};
+
+const drawGraphPreview = (c: CanvasRenderingContext2D, graph: LayoutGraph, panel: Rect) => {
+  const g = spreadPreviewUnitTriangles(graph);
+  const hasZeroInput = g.nodes.some((node) => !node.boundary && node.shape === 'triangle' && node.inputs === 0);
+  const view = previewViewForLayout(g, panel, hasZeroInput ? 1.18 : 0.9, hasZeroInput);
   c.save();
   c.beginPath();
   c.rect(panel.x, panel.y, panel.w, panel.h);
   c.clip();
   g.edges.forEach((edge) => {
     c.strokeStyle = edge.color || '#2f4f67';
-    c.lineWidth = 1.05;
+    c.lineWidth = 1.8;
     strokeSmoothPolyline(c, edge.points.map((p) => toScreen(p, view)));
   });
   g.nodes.forEach((node) => drawNode(c, node, view, new Set(), true));
   c.restore();
 };
 
-const drawRulePreview = (canvasEl: HTMLCanvasElement, name: string, enabled: boolean) => {
+const drawRulePreviewGraphs = (canvasEl: HTMLCanvasElement, rule: { lhs: LayoutGraph; rhs: LayoutGraph }, dimmed: boolean) => {
   canvasEl.width = Math.max(220, Math.floor(canvasEl.clientWidth || 220));
   canvasEl.height = Math.max(92, Math.floor(canvasEl.clientHeight || 92));
   const c = canvasEl.getContext('2d');
   if (!c) return;
   c.clearRect(0, 0, canvasEl.width, canvasEl.height);
-  c.fillStyle = enabled ? '#fbfdff' : '#f2f6fb';
+  c.fillStyle = dimmed ? '#f2f6fb' : '#fbfdff';
   c.fillRect(0, 0, canvasEl.width, canvasEl.height);
+  const gutter = 30;
+  const pad = 5;
+  const hasZeroInput = [...rule.lhs.nodes, ...rule.rhs.nodes].some((node) => !node.boundary && node.shape === 'triangle');
+  const verticalInset = hasZeroInput ? -7 : 0;
+  const sideW = (canvasEl.width - gutter - pad * 2) * 0.5;
+  const left: Rect = { x: pad, y: pad + verticalInset, w: sideW, h: canvasEl.height - pad * 2 - verticalInset * 2 };
+  const right: Rect = { x: pad + sideW + gutter, y: pad + verticalInset, w: sideW, h: canvasEl.height - pad * 2 - verticalInset * 2 };
+  drawGraphPreview(c, rule.lhs, left);
+  drawGraphPreview(c, rule.rhs, right);
+  drawPlainEquals(c, canvasEl.width * 0.5, canvasEl.height * 0.5, 24);
+};
+
+const drawRulePreview = (canvasEl: HTMLCanvasElement, name: string, dimmed: boolean) => {
+  canvasEl.width = Math.max(220, Math.floor(canvasEl.clientWidth || 220));
+  canvasEl.height = Math.max(92, Math.floor(canvasEl.clientHeight || 92));
+  const c = canvasEl.getContext('2d');
+  if (!c) return;
   const rule = layouts?.rules.get(name);
   if (!rule) {
+    c.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    c.fillStyle = dimmed ? '#f2f6fb' : '#fbfdff';
+    c.fillRect(0, 0, canvasEl.width, canvasEl.height);
     c.fillStyle = '#8da0b3';
     c.font = '600 11px "Avenir Next", sans-serif';
     c.textAlign = 'center';
@@ -506,37 +1186,68 @@ const drawRulePreview = (canvasEl: HTMLCanvasElement, name: string, enabled: boo
     c.fillText('layout...', canvasEl.width * 0.5, canvasEl.height * 0.5);
     return;
   }
-  const gutter = 28;
-  const pad = 8;
-  const sideW = (canvasEl.width - gutter - pad * 2) * 0.5;
-  const left: Rect = { x: pad, y: pad, w: sideW, h: canvasEl.height - pad * 2 };
-  const right: Rect = { x: pad + sideW + gutter, y: pad, w: sideW, h: canvasEl.height - pad * 2 };
-  drawGraphPreview(c, rule.lhs, left);
-  drawGraphPreview(c, rule.rhs, right);
-  c.fillStyle = '#6f859b';
-  c.font = '800 16px "Avenir Next", sans-serif';
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText('=', canvasEl.width * 0.5, canvasEl.height * 0.5);
+  drawRulePreviewGraphs(canvasEl, rule, dimmed);
+};
+
+const renderLevelButtons = () => {
+  const key = `${activePuzzleId}|${puzzles.map((p) => `${p.id}:${p.level}:${p.title}`).join(',')}`;
+  if (key === renderedLevelsKey) return;
+  renderedLevelsKey = key;
+  const labelFor = (puzzle: PuzzleInfo) => `${puzzle.level}: ${puzzle.title.replace(/^Level\s+\d+:\s*/, '')}`;
+  levelActions.replaceChildren(
+    ...puzzles.map((puzzle: PuzzleInfo) => {
+      const option = document.createElement('option');
+      option.value = puzzle.id;
+      option.textContent = labelFor(puzzle);
+      return option;
+    })
+  );
+  levelActions.value = activePuzzleId;
 };
 
 const refreshUi = () => {
   const lastMessage = scene.messages[0] || scene.subtitle || 'Lasso a tangle, then pick a move';
-  subtitle.textContent = currentSelection.selectedNodeIds.length > 0
+  const hasSelection = currentSelection.selectedNodeIds.length > 0;
+  const hasEnabledRule = rules.some((r) => r.enabled);
+  subtitle.textContent = hasSelection && hasEnabledRule
     ? `${currentSelection.selectedNodeIds.length} piece(s) selected. Pick a lit-up move.`
     : lastMessage;
   if (proofOpen) proof.textContent = scene.proofLines.length ? scene.proofLines.join('\n') : 'No proof yet.';
-  RULE_ORDER.forEach((name, idx) => {
-    const ra = rules.find((r) => r.name === name) ?? { name, enabled: false, reason: 'Unavailable' };
-    const btn = ruleButtons[idx];
-    btn.disabled = !ra.enabled;
-    btn.dataset.ruleName = name;
-    const nameEl = btn.querySelector<HTMLElement>('.rule-name');
-    if (nameEl) nameEl.textContent = name;
-    const pv = btn.querySelector<HTMLCanvasElement>('[data-rule-preview]');
-    if (pv) drawRulePreview(pv, name, ra.enabled);
-    btn.title = ra.enabled ? `Apply ${name}` : ra.reason ?? 'Not applicable';
-  });
+  renderLevelButtons();
+  rulesContainer.dataset.selection = String(hasSelection);
+  const ruleKey = [
+    activePuzzleId,
+    layouts ? 'ready' : 'pending',
+    scene.rules.map((r) => r.name).join(','),
+    rules.map((r) => `${r.name}:${r.enabled ? 1 : 0}:${r.reason ?? ''}`).join(',')
+  ].join('|');
+  if (ruleKey === renderedRulesKey) return;
+  renderedRulesKey = ruleKey;
+  rulesContainer.replaceChildren(
+    ...scene.rules.map((rule, idx) => {
+      const name = rule.name;
+      const ra = rules.find((r) => r.name === name) ?? { name, enabled: false, reason: 'Unavailable' };
+      const dimmed = hasSelection && !ra.enabled;
+      const btn = document.createElement('button');
+      btn.className = 'rule';
+      btn.dataset.dimmed = String(dimmed);
+      btn.type = 'button';
+      btn.dataset.action = 'rule';
+      btn.dataset.ruleName = name;
+      btn.dataset.ruleKey = `R${idx + 1}`;
+      btn.disabled = !ra.enabled;
+      btn.title = ra.enabled ? `Apply ${name}` : ra.reason ?? 'Not applicable';
+      btn.innerHTML = `
+        <div class="rule-meta"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
+        <canvas class="rule-preview" width="220" height="120"></canvas>
+      `;
+      const nameEl = btn.querySelector<HTMLElement>('.rule-name');
+      if (nameEl) nameEl.textContent = name;
+      const pv = btn.querySelector<HTMLCanvasElement>('.rule-preview');
+      if (pv) drawRulePreview(pv, name, dimmed);
+      return btn;
+    })
+  );
 };
 
 const panelsForSize = (cssW: number, cssH: number): PanelMap => {
@@ -564,18 +1275,15 @@ const render = () => {
   const selectedRhs = new Set(currentSelection.graphId === 'rhs' ? currentSelection.selectedNodeIds : []);
   const lhs = layouts?.graphs.get('lhs');
   const rhs = layouts?.graphs.get('rhs');
-  if (lhs) drawLayoutGraph(lhs, panels.lhs, selectedLhs);
+  const sharedScale = lhs && rhs ? sharedViewScale([lhs, rhs], panels.lhs) : undefined;
+  if (lhs) drawLayoutGraph(lhs, panels.lhs, selectedLhs, sharedScale ? viewForLayoutScale(lhs, panels.lhs, sharedScale) : undefined);
   else drawPendingGraph(panels.lhs);
-  if (rhs) drawLayoutGraph(rhs, panels.rhs, selectedRhs);
+  if (rhs) drawLayoutGraph(rhs, panels.rhs, selectedRhs, sharedScale ? viewForLayoutScale(rhs, panels.rhs, sharedScale) : undefined);
   else drawPendingGraph(panels.rhs);
 
   const eqX = panels.lhs.x + panels.lhs.w + (panels.rhs.x - (panels.lhs.x + panels.lhs.w)) * 0.5;
   const eqY = panels.lhs.y + panels.lhs.h * 0.5;
-  ctx.fillStyle = '#47607a';
-  ctx.font = '700 34px "Avenir Next", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('=', eqX, eqY);
+  drawQuestionEquals(ctx, eqX, eqY, 38);
   if (currentSelection.selectedNodeIds.length > 0) {
     const panel = panels[currentSelection.graphId as 'lhs' | 'rhs'];
     ctx.strokeStyle = '#1f6da0';
@@ -615,7 +1323,7 @@ const finishDrag = (p: Point) => {
   if (!inEither || lasso.length < 3) {
     lasso = [];
     currentSelection = emptySelection();
-    rules = RULE_ORDER.map((name) => ({ name, enabled: false, reason: 'Select a sub-diagram' }));
+    rules = disabledRulesFor(scene, 'Select a sub-diagram');
     render();
     return;
   }
@@ -632,19 +1340,23 @@ const cancelDrag = () => {
 const clearSelection = () => {
   lasso = [];
   currentSelection = emptySelection();
-  rules = RULE_ORDER.map((name) => ({ name, enabled: false, reason: 'Select a sub-diagram' }));
+  rules = disabledRulesFor(scene, 'Select a sub-diagram');
 };
 
-const applyRuleFromButton = (btn: HTMLButtonElement) => {
-  const id = btn.dataset.ruleId ?? '';
-  const name = ruleNameForId(id);
+const applyRuleFromButton = async (btn: HTMLButtonElement) => {
+  const name = btn.dataset.ruleName ?? '';
   if (!name || btn.disabled) return;
-  const res = adapter.applyRule(name, currentSelection);
+  const selection = { ...currentSelection, selectedNodeIds: [...currentSelection.selectedNodeIds] };
+  const seed = seedFromCurrentLayout(selection);
+  const collapseCenter = layoutCenterFromCurrentSelection(selection);
+  const res = adapter.applyRule(name, selection);
   if (res.ok && res.scene) {
     bumpMoves();
+    const solved = res.scene.messages.some((m) => m.includes('You just made a proof'));
+    await animateSelectionCollapse(selection);
     clearSelection();
-    setScene(res.scene);
-    if (res.scene.messages.some((m) => m.includes('You just made a proof'))) showSuccess();
+    await animateRewriteScene(res.scene, selection.graphId, seed, collapseCenter, new Set(selection.selectedNodeIds));
+    if (solved) showSuccess();
   } else {
     scene.messages = [res.error || `Rule ${name} not applicable.`];
     render();
@@ -700,11 +1412,19 @@ document.addEventListener('click', (e) => {
   if (!actionEl) return;
   const action = actionEl.dataset.action;
   if (action === 'reset' || action === 'play-again') {
+    layoutStopRequested = true;
+    releaseLayoutStep();
     resetShellState();
     clearSelection();
-    setScene(adapter.reset('double-fork'));
+    setScene(adapter.reset(activePuzzleId));
     render();
+  } else if (action === 'puzzle') {
+    loadPuzzle(actionEl.dataset.puzzleId || DEFAULT_PUZZLE_ID);
+  } else if (action === 'next-level') {
+    loadPuzzle(nextPuzzleId());
   } else if (action === 'undo') {
+    layoutStopRequested = true;
+    releaseLayoutStep();
     successModal.removeAttribute('data-open');
     proofPanel.removeAttribute('data-open');
     proofOpen = false;
@@ -713,6 +1433,8 @@ document.addEventListener('click', (e) => {
     setScene(adapter.undo());
     render();
   } else if (action === 'redo') {
+    layoutStopRequested = true;
+    releaseLayoutStep();
     clearSelection();
     setScene(adapter.redo());
     render();
@@ -724,10 +1446,27 @@ document.addEventListener('click', (e) => {
     proofOpen = false;
     proofPanel.removeAttribute('data-open');
   } else if (action === 'help') {
-    helpPanel.setAttribute('data-open', 'true');
+    void startTutorial();
+  } else if (action === 'close-tutorial') {
+    stopTutorial();
   } else if (action === 'close-help') {
     helpPanel.removeAttribute('data-open');
   }
+});
+
+document.addEventListener('pointerdown', (e) => {
+  if (!tutorialRunning) return;
+  const target = e.target as Element | null;
+  if (target?.closest('[data-action="help"]')) return;
+  stopTutorial();
+}, true);
+
+document.addEventListener('keydown', () => {
+  if (tutorialRunning) stopTutorial();
+}, true);
+
+levelActions.addEventListener('change', () => {
+  loadPuzzle(levelActions.value || DEFAULT_PUZZLE_ID);
 });
 
 if (typeof (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver !== 'undefined') {
