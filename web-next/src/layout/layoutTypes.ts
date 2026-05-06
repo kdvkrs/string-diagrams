@@ -6,6 +6,11 @@ export type LayoutNode = {
   color: string;
   selectable: boolean;
   boundary: boolean;
+  shape?: 'rect' | 'triangle' | 'cross' | 'circle';
+  inputs?: number;
+  outputs?: number;
+  modelX?: number;
+  modelY?: number;
   x: number;
   y: number;
   w: number;
