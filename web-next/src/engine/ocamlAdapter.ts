@@ -122,7 +122,8 @@ const toSceneState = (raw: unknown): SceneState => {
       rhs: parseGraph((r.rhs ?? {}) as Record<string, unknown>)
     })),
     messages: asArray<unknown>(state.messages).map(asString),
-    proofLines: asArray<unknown>(state.proofLines).map(asString)
+    proofLines: asArray<unknown>(state.proofLines).map(asString),
+    proofText: asString(state.proofText)
   };
 };
 

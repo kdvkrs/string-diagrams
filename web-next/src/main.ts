@@ -363,7 +363,7 @@ const showProof = () => {
   proofOpen = true;
   successModal.removeAttribute('data-open');
   proofPanel.setAttribute('data-open', 'true');
-  proof.textContent = scene.proofLines.length ? scene.proofLines.join('\n') : 'No proof yet.';
+  proof.textContent = scene.proofText || adapter.exportProof() || 'No proof yet.';
 };
 
 const startTutorial = async () => {
@@ -1212,7 +1212,7 @@ const refreshUi = () => {
   subtitle.textContent = hasSelection && hasEnabledRule
     ? `${currentSelection.selectedNodeIds.length} piece(s) selected. Pick a lit-up move.`
     : lastMessage;
-  if (proofOpen) proof.textContent = scene.proofLines.length ? scene.proofLines.join('\n') : 'No proof yet.';
+  if (proofOpen) proof.textContent = scene.proofText || adapter.exportProof() || 'No proof yet.';
   renderLevelButtons();
   rulesContainer.dataset.selection = String(hasSelection);
   const ruleKey = [

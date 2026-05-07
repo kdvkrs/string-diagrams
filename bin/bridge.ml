@@ -672,6 +672,18 @@ let restore st (env,lhs,rhs,proof) =
   st.rhs <- rhs;
   st.proof <- proof
 
+let graph_rocq g =
+  try Format.asprintf "%a" (Graph.pp Rocq) g
+  with _ -> "[not a term]"
+
+let proof_step graph_id rw before =
+  let side_prefix = if graph_id = "rhs" then "2: " else "" in
+  Printf.sprintf
+    "  transitivity (%s).\n  %smcat.\n  rewrite %s."
+    (graph_rocq before)
+    side_prefix
+    rw
+
 let rec apply_rule st graph_id name selected_ids polygon_opt =
   match safe_find_rule_match st graph_id name selected_ids polygon_opt with
   | Error msg ->
@@ -682,8 +694,9 @@ let rec apply_rule st graph_id name selected_ids polygon_opt =
   | Ok m ->
      checkpoint st;
      begin try
+        let target_before = Graph.copy st.env (graph_by_id st graph_id) in
         splice_by_nodes st graph_id selected_ids m.input_perm m.output_perm m.repl;
-        let step = Printf.sprintf "rewrite %s (* %s *)." m.rw graph_id in
+        let step = proof_step graph_id m.rw target_before in
         st.proof <- st.proof @ [step];
         let done_eq = Graph.iso st.lhs st.rhs in
         if done_eq then st.messages <- ["You just made a proof. Every move was checked."]
@@ -721,7 +734,28 @@ and snapshot_scene st =
     "graphs", Js.Unsafe.inject (arr [snapshot_graph st "lhs" st.lhs; snapshot_graph st "rhs" st.rhs]);
     "rules", Js.Unsafe.inject (arr hyp_rules);
     "messages", Js.Unsafe.inject (arr (List.map js_str st.messages));
-    "proofLines", Js.Unsafe.inject (arr (List.map js_str st.proof))
+    "proofLines", Js.Unsafe.inject (arr (List.map js_str st.proof));
+    "proofText", Js.Unsafe.inject (js_str (proof_artifact st))
+  ]
+
+and proof_artifact st =
+  let _, initial_lhs, initial_rhs = parse_puzzle_state st.puzzle.source in
+  let solved = Graph.iso st.lhs st.rhs in
+  let body =
+    match st.proof with
+    | [] -> "  (* No checked rewrite steps have been applied yet. *)"
+    | steps -> String.concat "\n" steps
+  in
+  String.concat "\n" [
+    Printf.sprintf "(* %s: %s *)" st.puzzle.level st.puzzle.title;
+    "Goal";
+    Printf.sprintf "  %s" (graph_rocq initial_lhs);
+    Printf.sprintf "= %s." (graph_rocq initial_rhs);
+    "Proof.";
+    "  mcat.";
+    body;
+    if solved then "  reflexivity." else "  (* Goal not solved yet: continue with checked rewrites. *)";
+    "Qed."
   ]
 
 let tutorial_demo name =
@@ -831,7 +865,7 @@ let redo () =
      restore st x;
      snapshot_scene st
 
-let export_proof () = js_str (String.concat "\n" !state_ref.proof)
+let export_proof () = js_str (proof_artifact !state_ref)
 
 let get_messages () = arr (List.map js_str !state_ref.messages)
 

@@ -61,6 +61,7 @@ export type SceneState = {
   rules: SceneRule[];
   messages: string[];
   proofLines: string[];
+  proofText: string;
 };
 
 export type SceneRule = {
