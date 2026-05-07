@@ -90,6 +90,7 @@ const parseGraph = (g: Record<string, unknown>): SceneGraph => ({
       radius: asOptionalNumber(((n.visual ?? {}) as Record<string, unknown>).radius),
       size: parsePoint(((n.visual ?? {}) as Record<string, unknown>).size)
     },
+    ceiling: n.ceiling ? (n.ceiling as Record<string, unknown>) : undefined,
     color: asString(n.color),
     selectable: asBoolean(n.selectable)
   })),

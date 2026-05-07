@@ -24,6 +24,7 @@ export type SceneNode = {
     radius?: number;
     size?: ScenePoint;
   };
+  ceiling?: PortRef;
   color: string;
   selectable: boolean;
 };

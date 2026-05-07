@@ -202,6 +202,17 @@ let ensure_sid st (n: node) =
      n#set "sid" sid;
      sid
 
+let fake_iport_obj st =
+  function
+  | Source k -> obj ["kind", Js.Unsafe.inject (js_str "source"); "index", Js.Unsafe.inject k]
+  | InnerTarget (n, p) ->
+     let sid = ensure_sid st n in
+     obj [
+       "kind", Js.Unsafe.inject (js_str "nodeTarget");
+       "nodeId", Js.Unsafe.inject (js_str sid);
+       "port", Js.Unsafe.inject p
+     ]
+
 let iter_nodes (g: graph) f = MSet.iter (fun n -> f n) g#nodes
 
 let find_node_by_sid (g: graph) sid =
@@ -234,6 +245,7 @@ let snapshot_node st (n: node) =
     "sourceTypes", Js.Unsafe.inject (arr (List.map (fun t -> js_str (typ_name t)) n#sources));
     "targetTypes", Js.Unsafe.inject (arr (List.map (fun t -> js_str (typ_name t)) n#targets));
     "visual", Js.Unsafe.inject (visual_obj n);
+    "ceiling", Js.Unsafe.inject (fake_iport_obj st n#ceiling);
     "color", Js.Unsafe.inject (js_str color);
     "selectable", Js.Unsafe.inject (Js.bool (kind = "var"))
   ]

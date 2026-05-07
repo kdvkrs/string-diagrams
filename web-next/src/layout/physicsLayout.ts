@@ -56,8 +56,8 @@ const ATTRACT_X = 5.0;
 const ATTRACT_Y = 4.0;
 const MIN_EDGE_DROP = 30;
 const ATTRACT_FLOW = 2.5;
-const MIN_ZERO_INPUT_SPACING = 82;
-const ATTRACT_ZERO_INPUT_SPACING = 2.6;
+const MIN_ZERO_INPUT_SPACING = 66;
+const ATTRACT_ZERO_INPUT_SPACING = 1.35;
 const ITERATIONS = 420;
 const PADDING = 24;
 const BOUNDARY_RADIUS = 8;
@@ -172,7 +172,8 @@ const makeSimNodes = (g: SceneGraph): SimNode[] => {
       targetTypes: node.targetTypes ?? [],
       shape,
       pointLike: shape === 'cross' || shape === 'circle' || shape === 'triangle',
-      level: 1
+      level: 1,
+      ceiling: node.ceiling && isPortRef(node.ceiling) ? node.ceiling : undefined
     };
   });
 };
@@ -329,6 +330,23 @@ const fakePortPosition = (p: KnownPortRef, nodes: Map<string, SimNode>, boundari
   }
 };
 
+const orderedOffset = (count: number, port: number) =>
+  (Math.max(1, Math.min(count, port)) - (count + 1) / 2) * Math.min(PORT_SPACING * 1.08, LEVEL_SPACING * 0.95);
+
+const forcePortPosition = (p: KnownPortRef, nodes: Map<string, SimNode>, boundaries: Map<string, Vec>): Vec => {
+  if (p.kind === 'nodeSource') {
+    const node = nodes.get(p.nodeId);
+    if (!node) return { x: 0, y: 0 };
+    if (node.pointLike && node.inputs > 1) return { x: node.x + orderedOffset(node.inputs, p.port), y: node.y };
+  }
+  if (p.kind === 'nodeTarget') {
+    const node = nodes.get(p.nodeId);
+    if (!node) return { x: 0, y: 0 };
+    if (node.pointLike && node.outputs > 1) return { x: node.x + orderedOffset(node.outputs, p.port), y: node.y };
+  }
+  return portPosition(p, nodes, boundaries);
+};
+
 const nextOpt = (g: SceneGraph, p: KnownPortRef): KnownPortRef | undefined => {
   const edge = g.edges.find((e) => isPortRef(e.from) && isPortRef(e.to) && samePort(e.from, p));
   return edge && isPortRef(edge.to) ? edge.to : undefined;
@@ -410,7 +428,7 @@ const assignCeilings = (g: SceneGraph, nodes: Map<string, SimNode>) => {
   const addCeiling = (hits: SimNode[], ceiling: (p: number) => KnownPortRef) => {
     const denom = hits.length + 1;
     hits.forEach((node, idx) => {
-      node.ceiling = ceiling((idx + 1) / denom);
+      if (!node.ceiling) node.ceiling = ceiling((idx + 1) / denom);
     });
   };
 
@@ -503,17 +521,18 @@ const seedInitialPositions = (g: SceneGraph, nodes: Map<string, SimNode>, bounda
 };
 
 const assignZeroInputLanes = (nodes: Map<string, SimNode>, boundaries: Map<string, Vec>) => {
-  const byLevel = new Map<number, SimNode[]>();
+  const byCeilingSlot = new Map<string, SimNode[]>();
   nodes.forEach((node) => {
-    if (node.inputs !== 0) return;
-    const bucket = byLevel.get(node.level) ?? [];
+    if (node.inputs !== 0 || !node.ceiling) return;
+    const bucket = byCeilingSlot.get(portKey(node.ceiling)) ?? [];
     bucket.push(node);
-    byLevel.set(node.level, bucket);
+    byCeilingSlot.set(portKey(node.ceiling), bucket);
   });
-  byLevel.forEach((bucket) => {
+  byCeilingSlot.forEach((bucket) => {
+    if (bucket.length < 2) return;
     bucket.sort((a, b) => a.x - b.x || a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
     const center = average(bucket.map((node) => node.ceiling ? fakePortPosition(node.ceiling, nodes, boundaries) : { x: node.x, y: node.y }));
-    const spacing = Math.max(MIN_ZERO_INPUT_SPACING, PORT_SPACING * 1.12);
+    const spacing = Math.min(MIN_ZERO_INPUT_SPACING, PORT_SPACING * 0.55);
     bucket.forEach((node, idx) => {
       node.zeroLaneX = center.x + (idx - (bucket.length - 1) / 2) * spacing;
       node.x = node.x * 0.35 + node.zeroLaneX * 0.65;
@@ -582,12 +601,15 @@ const improveOnce = (g: SceneGraph, nodes: Map<string, SimNode>, boundaries: Map
 
   g.edges.forEach((edge) => {
     if (!isPortRef(edge.from) || !isPortRef(edge.to)) return;
-    const p = portPosition(edge.from, nodes, boundaries);
-    const q = portPosition(edge.to, nodes, boundaries);
+    const p = forcePortPosition(edge.from, nodes, boundaries);
+    const q = forcePortPosition(edge.to, nodes, boundaries);
     const horizontal = { x: q.x - p.x, y: 0 };
     if (edge.from.kind === 'nodeTarget') {
       const node = nodes.get(edge.from.nodeId);
-      if (node) addForce(forces, node.id, smul(ATTRACT_X / Math.max(1, node.outputs), horizontal));
+      if (node) {
+        const weight = node.inputs === 0 ? ATTRACT_X * 3.4 : ATTRACT_X;
+        addForce(forces, node.id, smul(weight / Math.max(1, node.outputs), horizontal));
+      }
     }
     if (edge.to.kind === 'nodeSource') {
       const node = nodes.get(edge.to.nodeId);
@@ -610,7 +632,7 @@ const improveOnce = (g: SceneGraph, nodes: Map<string, SimNode>, boundaries: Map
   nodes.forEach((node) => {
     if (node.inputs === 0 && node.ceiling) {
       const ceiling = fakePortPosition(node.ceiling, nodes, boundaries);
-      const ceilingWeight = node.zeroLaneX === undefined ? ATTRACT_X : 1.2;
+      const ceilingWeight = node.zeroLaneX === undefined ? 1.45 : 1.0;
       addForce(forces, node.id, smul(ceilingWeight, { x: ceiling.x - node.x, y: 0 }));
     }
     if (node.inputs === 0 && node.zeroLaneX !== undefined) {
