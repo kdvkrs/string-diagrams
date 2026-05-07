@@ -1263,8 +1263,8 @@ const panelsForSize = (cssW: number, cssH: number): PanelMap => {
 const render = () => {
   const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
   const rect = canvas.getBoundingClientRect();
-  const cssW = clamp(Math.floor(rect.width), 320, 2048);
-  const cssH = clamp(Math.floor(rect.height), 260, 1536);
+  const cssW = Math.max(1, Math.floor(rect.width));
+  const cssH = Math.max(1, Math.floor(rect.height));
   canvas.width = Math.floor(cssW * dpr);
   canvas.height = Math.floor(cssH * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1318,7 +1318,7 @@ const finishDrag = (p: Point) => {
   dragging = false;
   lasso.push(p);
   const rect = canvas.getBoundingClientRect();
-  const panels = panelsForSize(clamp(Math.floor(rect.width), 320, 2048), clamp(Math.floor(rect.height), 260, 1536));
+  const panels = panelsForSize(Math.max(1, Math.floor(rect.width)), Math.max(1, Math.floor(rect.height)));
   const inEither = lasso.some((q) => inPanel(q, panels.lhs) || inPanel(q, panels.rhs));
   if (!inEither || lasso.length < 3) {
     lasso = [];
