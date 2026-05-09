@@ -9,6 +9,7 @@ type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
 type View = { scale: number; tx: number; ty: number };
 type PanelMap = { lhs: Rect; rhs: Rect };
+type CrossingDiagnostic = { graphId: string; edgeA: string; edgeB: string; point: Point };
 type LayoutState = {
   graphs: Map<string, LayoutGraph>;
   rules: Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>;
@@ -197,6 +198,7 @@ let tutorialRunning = false;
 let tutorialAbort: AbortController | null = null;
 let renderQueued = false;
 let queuedRenderRefresh = false;
+let debugCrossings: CrossingDiagnostic[] = [];
 
 // Tutorial lasso tuning: decrease this if the ghost lasso catches nearby nodes,
 // increase it if the lasso feels too tight around the highlighted rewrite.
@@ -281,7 +283,8 @@ const requestRender = (reason: string, refresh = true) => {
 
 const formatPerfRows = () => {
   const rows = perf.snapshot();
-  if (rows.length === 0) return 'No samples yet. Lasso or apply a rewrite.';
+  const crossingLine = `unintended crossings: ${debugCrossings.length}`;
+  if (rows.length === 0) return `No samples yet. Lasso or apply a rewrite.\n${crossingLine}`;
   const head = 'name                         count   total    avg    max';
   const body = rows.slice(0, 14).map((row) => [
     row.name.padEnd(28).slice(0, 28),
@@ -290,7 +293,8 @@ const formatPerfRows = () => {
     `${row.avgMs.toFixed(3)}ms`.padStart(8),
     `${row.maxMs.toFixed(1)}ms`.padStart(7)
   ].join(' '));
-  return [head, ...body].join('\n');
+  const crossingDetails = debugCrossings.slice(0, 6).map((c) => `  ${c.graphId}: ${c.edgeA} × ${c.edgeB}`);
+  return [crossingLine, ...crossingDetails, '', head, ...body].join('\n');
 };
 
 let perfPanelTimer: number | undefined;
@@ -842,6 +846,83 @@ const toScreen = (p: LayoutPoint, v: View): Point => ({ x: p.x * v.scale + v.tx,
 
 const inPanel = (p: Point, r: Rect) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
+const distSq = (a: LayoutPoint, b: LayoutPoint) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+const sameLayoutPoint = (a: LayoutPoint, b: LayoutPoint) => distSq(a, b) < 1e-4;
+
+const cubicPoint = (p0: LayoutPoint, p1: LayoutPoint, p2: LayoutPoint, p3: LayoutPoint, t: number): LayoutPoint => {
+  const mt = 1 - t;
+  const a = mt ** 3;
+  const b = 3 * mt ** 2 * t;
+  const c = 3 * mt * t ** 2;
+  const d = t ** 3;
+  return {
+    x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+    y: a * p0.y + b * p1.y + c * p2.y + d * p3.y
+  };
+};
+
+const edgeSamples = (points: LayoutPoint[]) => {
+  if (points.length === 4) {
+    const out: LayoutPoint[] = [];
+    for (let i = 0; i <= 16; i += 1) out.push(cubicPoint(points[0], points[1], points[2], points[3], i / 16));
+    return out;
+  }
+  return points;
+};
+
+const segmentIntersection = (a: LayoutPoint, b: LayoutPoint, c: LayoutPoint, d: LayoutPoint): LayoutPoint | null => {
+  const r = { x: b.x - a.x, y: b.y - a.y };
+  const s = { x: d.x - c.x, y: d.y - c.y };
+  const denom = r.x * s.y - r.y * s.x;
+  if (Math.abs(denom) < 1e-6) return null;
+  const q = { x: c.x - a.x, y: c.y - a.y };
+  const t = (q.x * s.y - q.y * s.x) / denom;
+  const u = (q.x * r.y - q.y * r.x) / denom;
+  if (t <= 0.04 || t >= 0.96 || u <= 0.04 || u >= 0.96) return null;
+  return { x: a.x + t * r.x, y: a.y + t * r.y };
+};
+
+const edgePairSharesEndpoint = (a: LayoutPoint[], b: LayoutPoint[]) => {
+  const a0 = a[0];
+  const a1 = a[a.length - 1];
+  const b0 = b[0];
+  const b1 = b[b.length - 1];
+  return Boolean(a0 && a1 && b0 && b1 && (
+    sameLayoutPoint(a0, b0) || sameLayoutPoint(a0, b1) || sameLayoutPoint(a1, b0) || sameLayoutPoint(a1, b1)
+  ));
+};
+
+const crossingIsAtExplicitNode = (g: LayoutGraph, p: LayoutPoint) =>
+  g.nodes.some((node) => {
+    if (node.boundary || node.shape !== 'cross') return false;
+    const center = { x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 };
+    return distSq(center, p) < Math.max(16, node.w * 2, node.h * 2) ** 2;
+  });
+
+const crossingDiagnosticsForGraph = (g: LayoutGraph, view: View): CrossingDiagnostic[] => {
+  if (!perf.enabled) return [];
+  const out: CrossingDiagnostic[] = [];
+  const sampled = g.edges.map((edge) => ({ edge, samples: edgeSamples(edge.points) }));
+  for (let i = 0; i < sampled.length; i += 1) {
+    for (let j = i + 1; j < sampled.length; j += 1) {
+      const a = sampled[i];
+      const b = sampled[j];
+      if (edgePairSharesEndpoint(a.samples, b.samples)) continue;
+      let found: LayoutPoint | null = null;
+      for (let ai = 0; ai < a.samples.length - 1 && !found; ai += 1) {
+        for (let bi = 0; bi < b.samples.length - 1 && !found; bi += 1) {
+          found = segmentIntersection(a.samples[ai], a.samples[ai + 1], b.samples[bi], b.samples[bi + 1]);
+        }
+      }
+      if (found && !crossingIsAtExplicitNode(g, found)) {
+        out.push({ graphId: g.id, edgeA: a.edge.id, edgeB: b.edge.id, point: toScreen(found, view) });
+      }
+    }
+  }
+  return out;
+};
+
 const strokeSmoothPolyline = (c: CanvasRenderingContext2D, points: Point[]) => {
   if (points.length < 2) return;
   c.beginPath();
@@ -1110,7 +1191,8 @@ const evaluateSelection = (panels: PanelMap) => {
     selectedNodeIds: selected,
     polygon: [],
     cuts: [],
-    cycleOrder: []
+    cycleOrder: [],
+    debug: perf.enabled
   };
   rules = perf.time('ocaml.evaluateSelection', () => adapter.evaluateSelection(currentSelection));
   if (!rules.some((r) => r.enabled)) {
@@ -1347,10 +1429,37 @@ const render = (refresh = true) => {
   const lhs = layouts?.graphs.get('lhs');
   const rhs = layouts?.graphs.get('rhs');
   const sharedScale = lhs && rhs ? sharedViewScale([lhs, rhs], panels.lhs) : undefined;
-  if (lhs) drawLayoutGraph(lhs, panels.lhs, selectedLhs, sharedScale ? viewForLayoutScale(lhs, panels.lhs, sharedScale) : undefined);
+  const lhsView = lhs ? (sharedScale ? viewForLayoutScale(lhs, panels.lhs, sharedScale) : viewForLayout(lhs, panels.lhs)) : undefined;
+  const rhsView = rhs ? (sharedScale ? viewForLayoutScale(rhs, panels.rhs, sharedScale) : viewForLayout(rhs, panels.rhs)) : undefined;
+  if (lhs && lhsView) drawLayoutGraph(lhs, panels.lhs, selectedLhs, lhsView);
   else drawPendingGraph(panels.lhs);
-  if (rhs) drawLayoutGraph(rhs, panels.rhs, selectedRhs, sharedScale ? viewForLayoutScale(rhs, panels.rhs, sharedScale) : undefined);
+  if (rhs && rhsView) drawLayoutGraph(rhs, panels.rhs, selectedRhs, rhsView);
   else drawPendingGraph(panels.rhs);
+  debugCrossings = perf.enabled
+    ? perf.time('debug.crossings', () => [
+        ...(lhs && lhsView ? crossingDiagnosticsForGraph(lhs, lhsView) : []),
+        ...(rhs && rhsView ? crossingDiagnosticsForGraph(rhs, rhsView) : [])
+      ])
+    : [];
+  if (debugCrossings.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = '#d33a2c';
+    ctx.fillStyle = 'rgba(211, 58, 44, 0.16)';
+    ctx.lineWidth = 1.5;
+    debugCrossings.forEach(({ point }) => {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(point.x - 5, point.y - 5);
+      ctx.lineTo(point.x + 5, point.y + 5);
+      ctx.moveTo(point.x + 5, point.y - 5);
+      ctx.lineTo(point.x - 5, point.y + 5);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
 
   const eqX = panels.lhs.x + panels.lhs.w + (panels.rhs.x - (panels.lhs.x + panels.lhs.w)) * 0.5;
   const eqY = panels.lhs.y + panels.lhs.h * 0.5;

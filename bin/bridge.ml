@@ -333,22 +333,15 @@ let mset_size s = MSet.fold (fun _ n -> n + 1) 0 s
 
 type extracted = {
   subgraph: graph;
-  inputs: (Graph_type.iport * Graph_type.oport) list;
-  outputs: (Graph_type.iport * Graph_type.oport) list;
-  box: box;
 }
 
 type rule_match = {
   rw: string;
   repl: graph;
-  input_perm: int list;
-  output_perm: int list;
 }
 
 type extraction_variant = {
-  input_perm: int list;
   inputs: (Graph_type.iport * Graph_type.oport) list;
-  output_perm: int list;
   outputs: (Graph_type.iport * Graph_type.oport) list;
 }
 
@@ -365,9 +358,6 @@ let same_node_set subset captured =
   sid_list_of_nodes subset = sid_list_of_mset captured
 
 let node_set nodes = List.fold_left (fun acc n -> MSet.add n acc) MSet.empty nodes
-
-let nodes_box nodes =
-  List.fold_left (fun bx n -> Box2.union bx n#box) Box2.empty nodes
 
 let cmp_point p q =
   let c = compare (P2.x p) (P2.x q) in
@@ -405,7 +395,7 @@ let boundary_edges_by_nodes (g: graph) nodes =
   in
   nodes_in, inputs, outputs, !internals
 
-let extract_with_boundary (g: graph) nodes nodes_in inputs outputs internals =
+let extract_with_boundary (g: graph) nodes_in inputs outputs internals =
   let find_index e l =
     let rec go k = function
       | [] -> None
@@ -442,19 +432,7 @@ let extract_with_boundary (g: graph) nodes nodes_in inputs outputs internals =
   let targets = List.map (fun (i, _) -> g#ityp i) outputs in
   let h = Graph.empty sources targets in
   h#update nodes_in edges;
-  { subgraph = h; inputs; outputs; box = nodes_box nodes }
-
-let extract_by_nodes (g: graph) nodes =
-  let nodes_in, inputs, outputs, internals = boundary_edges_by_nodes g nodes in
-  extract_with_boundary g nodes nodes_in inputs outputs internals
-
-let reorder_by_perm l perm = List.map (List.nth l) perm
-
-let extract_by_nodes_permutation (g: graph) nodes input_perm output_perm =
-  let nodes_in, inputs, outputs, internals = boundary_edges_by_nodes g nodes in
-  let inputs = reorder_by_perm inputs input_perm in
-  let outputs = reorder_by_perm outputs output_perm in
-  extract_with_boundary g nodes nodes_in inputs outputs internals
+  { subgraph = h }
 
 let rec insert_everywhere x = function
   | [] -> [[x]]
@@ -476,9 +454,9 @@ let extraction_candidates_by_nodes (g: graph) nodes =
     |> List.concat_map (fun input_order ->
            permutations_small indexed_outputs
            |> List.map (fun output_order ->
-                  let input_perm, inputs = List.split input_order in
-                  let output_perm, outputs = List.split output_order in
-                  { input_perm; inputs; output_perm; outputs }))
+                  let _, inputs = List.split input_order in
+                  let _, outputs = List.split output_order in
+                  { inputs; outputs }))
   in
   nodes_in, internals, variants
 
@@ -499,10 +477,14 @@ let layout_replacement_into_box repl dst =
     MSet.iter (fun n -> n#move (map n#pos)) repl#nodes
   )
 
-let splice_by_nodes st graph_id selected_ids input_perm output_perm repl =
+let splice_by_nodes st graph_id selected_ids repl =
   let target = graph_by_id st graph_id in
   let nodes = selected_nodes st graph_id selected_ids in
-  let ex = extract_by_nodes_permutation target nodes input_perm output_perm in
+  let ex =
+    match Region.extract target nodes with
+    | Ok ex -> ex
+    | Error e -> failwith (Region.error_message e)
+  in
   let repl = Graph.copy st.env repl in
   layout_replacement_into_box repl ex.box;
   let node_is_selected n = List.exists ((==) n) nodes in
@@ -530,8 +512,30 @@ let splice_by_nodes st graph_id selected_ids input_perm output_perm repl =
   target#update (MSet.union kept_nodes repl#nodes) (MSet.union kept_edges repl_edges);
   set_graph_by_id st graph_id target
 
-let find_rule_match st graph_id name selected_ids polygon_opt =
+let rec find_rule_match st graph_id name selected_ids polygon_opt =
   ignore polygon_opt;
+  let debug = false in
+  find_rule_match_with_debug st graph_id name selected_ids debug
+
+and permutation_match_result st graph_id name selected_ids =
+  let target = graph_by_id st graph_id in
+  let probe = Graph.copy st.env target in
+  let nodes = selected_nodes { st with lhs = (if graph_id = "lhs" then probe else st.lhs); rhs = (if graph_id = "rhs" then probe else st.rhs) } graph_id selected_ids in
+  match nodes, List.assoc_opt name (hyps st) with
+  | [], _ -> None
+  | _, None -> None
+  | _, Some (l, r) ->
+     let nodes_in, internals, variants = extraction_candidates_by_nodes probe nodes in
+     List.find_map
+       (fun variant ->
+         let ex = extract_with_boundary probe nodes_in variant.inputs variant.outputs internals in
+         let h = ex.subgraph in
+         if same_node_set nodes h#nodes && Graph.iso h l then Some name
+         else if same_node_set nodes h#nodes && Graph.iso h r then Some ("-" ^ name)
+         else None)
+       variants
+
+and find_rule_match_with_debug st graph_id name selected_ids debug =
   let target = graph_by_id st graph_id in
   let probe = Graph.copy st.env target in
   let nodes = selected_nodes { st with lhs = (if graph_id = "lhs" then probe else st.lhs); rhs = (if graph_id = "rhs" then probe else st.rhs) } graph_id selected_ids in
@@ -540,12 +544,6 @@ let find_rule_match st graph_id name selected_ids polygon_opt =
     match List.assoc_opt name (hyps st) with
     | None -> Error "unknown rule"
     | Some (l,r) ->
-       let attempts = ref 0 in
-       let set_miss = ref 0 in
-       let iso_miss = ref 0 in
-       let cut_fail = ref 0 in
-       let exn_fail = ref 0 in
-       let sig_note = ref "" in
        let selected_sids = String.concat "," (sid_list_of_nodes nodes) in
        let gsig (g: graph) =
          Printf.sprintf "n=%d e=%d s=%d t=%d"
@@ -554,63 +552,61 @@ let find_rule_match st graph_id name selected_ids polygon_opt =
        let gpp (g: graph) =
          Format.asprintf "%a" (Graph.pp Full) g
        in
-       let lsig = gsig l in
-       let rsig = gsig r in
-       let default_ex = extract_by_nodes target nodes in
-       let failure () =
-         let h = default_ex.subgraph in
-         Error
-           (Printf.sprintf
-              "rule not applicable [graph=%s sel=%d ids=[%s] supplied_polygon=%b pat=%d/%d attempts=%d set_miss=%d iso_miss=%d cut_fail=%d exn=%d %s patterns=(%s|%s)]"
-              graph_id
-              (List.length nodes)
-              selected_sids
-              false
-              (mset_size l#nodes)
-              (mset_size r#nodes)
-              !attempts
-              !set_miss
-              !iso_miss
-              !cut_fail
-              !exn_fail
-              (if !sig_note = "" then
-                 Printf.sprintf "captured=%s captured_pp=%S lhs_pp=%S rhs_pp=%S"
-                   (gsig h) (gpp h) (gpp l) (gpp r)
-               else !sig_note)
-              lsig
-              rsig)
+       let fallback_note () =
+         if not debug then ""
+         else match permutation_match_result st graph_id name selected_ids with
+              | Some rw -> Printf.sprintf " debug_permutation_would_match=%s" rw
+              | None -> " debug_permutation_would_not_match"
        in
-       let nodes_in, internals, variants = extraction_candidates_by_nodes probe nodes in
-       let rec try_variants = function
-         | [] -> failure ()
-         | variant :: rest ->
-            incr attempts;
-            let ex = extract_with_boundary probe nodes nodes_in variant.inputs variant.outputs internals in
-            let h = ex.subgraph in
-            if same_node_set nodes h#nodes && Graph.iso h l then
-              Ok { rw = name; repl = r; input_perm = variant.input_perm; output_perm = variant.output_perm }
-            else if same_node_set nodes h#nodes && Graph.iso h r then
-              Ok { rw = "-" ^ name; repl = l; input_perm = variant.input_perm; output_perm = variant.output_perm }
-            else if same_node_set nodes h#nodes then (
-              iso_miss := !iso_miss + 1;
-              if !sig_note = "" then
-                sig_note := Printf.sprintf "captured=%s captured_pp=%S lhs_pp=%S rhs_pp=%S"
-                              (gsig h) (gpp h) (gpp l) (gpp r);
-              try_variants rest
-            ) else (
-              set_miss := !set_miss + 1;
-              try_variants rest
-            )
-       in
-       try_variants variants
+       match Region.extract probe nodes with
+       | Error e ->
+          Error
+            (Printf.sprintf
+               "canonical selection rejected [graph=%s sel=%d ids=[%s] reason=%S%s]"
+               graph_id
+               (List.length nodes)
+               selected_sids
+               (Region.error_message e)
+               (fallback_note ()))
+       | Ok ex ->
+          let h = ex.subgraph in
+          let captured =
+            Printf.sprintf "captured=%s in=%d out=%d captured_pp=%S lhs_pp=%S rhs_pp=%S"
+              (gsig h)
+              (List.length ex.inputs)
+              (List.length ex.outputs)
+              (gpp h)
+              (gpp l)
+              (gpp r)
+          in
+          if same_node_set nodes h#nodes && Graph.iso h l then
+            Ok { rw = name; repl = r }
+          else if same_node_set nodes h#nodes && Graph.iso h r then
+            Ok { rw = "-" ^ name; repl = l }
+          else
+            Error
+              (Printf.sprintf
+                 "rule not applicable [graph=%s sel=%d ids=[%s] %s patterns=(%s|%s)%s]"
+                 graph_id
+                 (List.length nodes)
+                 selected_sids
+                 captured
+                 (gsig l)
+                 (gsig r)
+                 (fallback_note ()))
 
 let safe_find_rule_match st graph_id name selected_ids polygon_opt =
   try find_rule_match st graph_id name selected_ids polygon_opt with
   | e -> Error (Printf.sprintf "rule check failed: %s" (Printexc.to_string e))
 
-let evaluate_selection st graph_id selected_ids polygon_opt =
+let safe_find_rule_match_with_debug st graph_id name selected_ids debug =
+  try find_rule_match_with_debug st graph_id name selected_ids debug with
+  | e -> Error (Printf.sprintf "rule check failed: %s" (Printexc.to_string e))
+
+let evaluate_selection st graph_id selected_ids polygon_opt debug =
   List.map (fun name ->
-      match safe_find_rule_match st graph_id name selected_ids polygon_opt with
+      ignore polygon_opt;
+      match safe_find_rule_match_with_debug st graph_id name selected_ids debug with
       | Ok _ ->
          obj [
            "name", Js.Unsafe.inject (js_str name);
@@ -695,7 +691,7 @@ let rec apply_rule st graph_id name selected_ids polygon_opt =
      checkpoint st;
      begin try
         let target_before = Graph.copy st.env (graph_by_id st graph_id) in
-        splice_by_nodes st graph_id selected_ids m.input_perm m.output_perm m.repl;
+        splice_by_nodes st graph_id selected_ids m.repl;
         let step = proof_step graph_id m.rw target_before in
         st.proof <- st.proof @ [step];
         let done_eq = Graph.iso st.lhs st.rhs in
@@ -829,9 +825,14 @@ let evaluate_selection_js (selection: Js.Unsafe.any Js.t) =
     | None -> "lhs"
   in
   let polygon = polygon_from_js selection in
+  let debug =
+    match Js.Optdef.to_option (Js.Unsafe.get selection "debug") with
+    | Some b -> Js.to_bool b
+    | None -> false
+  in
   let selected = Js.Unsafe.get selection "selectedNodeIds" in
   let selected_ids = Js.to_array selected |> Array.to_list |> List.map Js.to_string in
-  arr (evaluate_selection !state_ref graph_id selected_ids polygon)
+  arr (evaluate_selection !state_ref graph_id selected_ids polygon debug)
 
 let apply_rule_js name_js selection =
   let name = Js.to_string name_js in

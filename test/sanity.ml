@@ -243,3 +243,72 @@ let _ = test_niso e "n·k·k;m·m·id" "n'·k·k;m·m·id"
 
 (* let e = "m: A*A->1 k: 1->A*A" *)
 (* let _ = test e "id·k·id ; m·m" *)
+
+let graph_of_term env s = snd (from_string (env ^ " -- " ^ s))
+
+let only_node g =
+  match MSet.fold List.cons [] g#nodes with
+  | [n] -> n
+  | _ -> failwith "expected one node"
+
+let all_nodes g = MSet.fold List.cons [] g#nodes
+
+let assert_region_iso env selected_term expected_term =
+  let g = graph_of_term env selected_term in
+  let expected = graph_of_term env expected_term in
+  match Region.extract g (all_nodes g) with
+  | Error e -> failwith (Region.error_message e)
+  | Ok ex ->
+     if not (Graph.iso ex.subgraph expected) then (
+       Format.eprintf "Region mismatch:\nextracted = %a\nexpected = %a@."
+         (Graph.pp Full) ex.subgraph (Graph.pp Full) expected;
+       failwith "region iso")
+
+let _ =
+  let env = "x: B*A -> A*B" in
+  let g = graph_of_term env "x" in
+  match Region.extract g [only_node g] with
+  | Error e -> failwith (Region.error_message e)
+  | Ok ex ->
+     if not (Graph.iso ex.subgraph g) then failwith "single crossing region order"
+
+let _ =
+  match Region.extract (graph_of_term "x: A->A" "x") [] with
+  | Error Region.Empty_selection -> ()
+  | Error e -> failwith (Region.error_message e)
+  | Ok _ -> failwith "empty region accepted"
+
+let _ = assert_region_iso "e: 1->M m: M*M->M" "e·id;m" "e·id;m"
+let _ = assert_region_iso "f: 1->N n: N*N->N" "id·f;n" "id·f;n"
+
+let mu2_env =
+  "m: M⊗M -> M
+   e: 1 -> M
+   n: N⊗N -> N
+   f: 1 -> N
+   x: N⊗M -> M⊗N"
+
+let _ = assert_region_iso mu2_env "e·id;m" "e·id;m"
+let _ = assert_region_iso mu2_env "id·e;m" "id·e;m"
+let _ = assert_region_iso mu2_env "f·id;n" "f·id;n"
+let _ = assert_region_iso mu2_env "id·f;n" "id·f;n"
+let _ = assert_region_iso mu2_env "f·id;x" "f·id;x"
+let _ = assert_region_iso mu2_env "id·e;x" "id·e;x"
+let _ = assert_region_iso mu2_env "id·m;x" "id·m;x"
+let _ = assert_region_iso mu2_env "n·id;x" "n·id;x"
+
+let mu3_env =
+  "m: M^2 -> M
+   n: N^2-> N
+   o: O^2-> O
+   x: N⊗M -> M⊗N
+   y: O⊗N -> N⊗O
+   z: O⊗M -> M⊗O"
+
+let _ = assert_region_iso mu3_env "id·m;x" "id·m;x"
+let _ = assert_region_iso mu3_env "n·id;x" "n·id;x"
+let _ = assert_region_iso mu3_env "id·n;y" "id·n;y"
+let _ = assert_region_iso mu3_env "o·id;y" "o·id;y"
+let _ = assert_region_iso mu3_env "id·m;z" "id·m;z"
+let _ = assert_region_iso mu3_env "o·id;z" "o·id;z"
+let _ = assert_region_iso mu3_env "y·id ; id·z ; x·id" "y·id ; id·z ; x·id"

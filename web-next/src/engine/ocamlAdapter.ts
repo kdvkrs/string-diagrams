@@ -157,7 +157,8 @@ const toSelectionDescriptor = (raw: unknown): SelectionDescriptor => {
       side: asString(cut.side) === 'target' ? 'target' : 'source',
       t: asNumber(cut.t)
     })),
-    cycleOrder: asArray<unknown>(x.cycleOrder).map(asString)
+    cycleOrder: asArray<unknown>(x.cycleOrder).map(asString),
+    debug: asBoolean(x.debug)
   };
 };
 

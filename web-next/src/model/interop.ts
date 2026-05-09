@@ -82,6 +82,7 @@ export type SelectionDescriptor = {
   polygon: ScenePoint[];
   cuts: SelectionCut[];
   cycleOrder: string[];
+  debug?: boolean;
 };
 
 export type RuleAvailability = {
