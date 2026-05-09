@@ -1,5 +1,6 @@
 import type { PortRef, SceneGraph, SceneNode } from '../model/interop';
 import type { LayoutEdge, LayoutGraph, LayoutNode, LayoutPoint } from './layoutTypes';
+import { perf } from '../perf';
 
 type Vec = { x: number; y: number };
 type Shape = 'rect' | 'triangle' | 'cross' | 'circle';
@@ -823,7 +824,7 @@ const layoutFromSimulation = (g: SceneGraph, { nodes, boundaries }: SimState): L
 };
 
 export const layoutSceneGraph = async (g: SceneGraph, seed?: LayoutSeed): Promise<LayoutGraph> =>
-  layoutFromSimulation(g, simulate(g, seed));
+  perf.time('physics.layoutSceneGraph', () => layoutFromSimulation(g, simulate(g, seed)));
 
 const nextAnimationFrame = () =>
   new Promise<void>((resolve) => {
@@ -851,8 +852,8 @@ export const animateSceneGraphLayout = async (
   const forceFrameUntil = options.forceFrameUntil ?? 0;
   const maxIterations = options.maxIterations ?? ITERATIONS;
   const frameDelayMs = options.frameDelayMs ?? 0;
-  const state = initSimulation(g, options.seed);
-  onFrame(layoutFromSimulation(g, state), 0);
+  const state = perf.time('physics.replay.init', () => initSimulation(g, options.seed));
+  onFrame(perf.time('physics.replay.materialize', () => layoutFromSimulation(g, state)), 0);
   for (let i = 1; i <= maxIterations; i += 1) {
     if (options.shouldStop?.()) break;
     while (options.shouldPause?.() && !options.shouldStop?.()) {
@@ -860,15 +861,16 @@ export const animateSceneGraphLayout = async (
       else await wait(50);
     }
     if (options.shouldStop?.()) break;
-    const stable = improveOnce(g, state.nodes, state.boundaries);
+    const stable = perf.time('physics.replay.tick', () => improveOnce(g, state.nodes, state.boundaries));
     if (i <= forceFrameUntil || i % frameEvery === 0 || stable) {
-      onFrame(layoutFromSimulation(g, state), i);
+      perf.count('physics.replay.frames');
+      onFrame(perf.time('physics.replay.materialize', () => layoutFromSimulation(g, state)), i);
       await nextAnimationFrame();
       if (frameDelayMs > 0) await wait(frameDelayMs);
     }
     if (stable) break;
   }
-  const finalLayout = layoutFromSimulation(g, state);
+  const finalLayout = perf.time('physics.replay.materialize', () => layoutFromSimulation(g, state));
   onFrame(finalLayout, maxIterations);
   return finalLayout;
 };

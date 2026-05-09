@@ -37,3 +37,32 @@ make web-next-serve
 
 Do not open `web-next/index.html` directly with a `file://` URL. It is the Vite
 source entrypoint, not the built app.
+
+## Optional performance instrumentation
+
+Normal production builds do not include active profiling. For browser profiling:
+
+```sh
+make web-next-serve-perf
+```
+
+Open `http://localhost:8080/?perf=1`, exercise a level, then run this in the
+in-app performance panel, or run this in the browser console:
+
+```js
+PuzzlePerf.report()
+```
+
+Useful checks:
+
+- Draw a long lasso in Level 4 and inspect `render.total`, `render.canvas`, and
+  `render.request.lasso`.
+- Apply a rewrite in Level 4 and inspect `physics.replay.tick`,
+  `physics.replay.materialize`, `render.total`, and `ocaml.applyRule`.
+- Use `PuzzlePerf.reset()` between runs.
+
+The same build also supports `PuzzlePerf.setEnabled(true)` or
+`localStorage.sdPerf = "1"` if adding `?perf=1` is inconvenient.
+
+On tablets, the performance panel is usually easier than remote debugging. Use
+its `Copy` button to copy the same JSON returned by `PuzzlePerf.report()`.

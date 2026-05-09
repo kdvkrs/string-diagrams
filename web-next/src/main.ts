@@ -3,6 +3,7 @@ import { OcamlAdapter } from './engine/ocamlAdapter';
 import { type LayoutGraph, type LayoutNode, type LayoutPoint } from './layout/layoutTypes';
 import { animateSceneGraphLayout, layoutSceneGraph, type LayoutSeed } from './layout/physicsLayout';
 import type { PuzzleInfo, RuleAvailability, SceneState, SelectionDescriptor } from './model/interop';
+import { perf } from './perf';
 
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -113,6 +114,15 @@ app.innerHTML = `
     </svg>
   </div>
   <div class="tut-ripple" id="tutorial-ripple"></div>
+  <div class="perf-panel" id="perf-panel" hidden>
+    <div class="perf-head">
+      <strong>Perf</strong>
+      <button type="button" data-perf-action="reset">Reset</button>
+      <button type="button" data-perf-action="copy">Copy</button>
+      <button type="button" data-perf-action="hide">Hide</button>
+    </div>
+    <pre id="perf-output"></pre>
+  </div>
   <footer class="dock">
     <div class="dock-label">Moves</div>
     <div class="rules" id="rules"></div>
@@ -139,11 +149,13 @@ const confettiCanvas = document.querySelector<HTMLCanvasElement>('#confetti-canv
 const tutorialCaption = document.querySelector<HTMLElement>('#tutorial-caption');
 const tutorialFinger = document.querySelector<HTMLElement>('#tutorial-finger');
 const tutorialRipple = document.querySelector<HTMLElement>('#tutorial-ripple');
+const perfPanel = document.querySelector<HTMLElement>('#perf-panel');
+const perfOutput = document.querySelector<HTMLPreElement>('#perf-output');
 const levelActions = document.querySelector<HTMLSelectElement>('#level-actions');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 if (
   !canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel || !tutorialPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !confettiCanvas ||
-  !tutorialCaption || !tutorialFinger || !tutorialRipple ||
+  !tutorialCaption || !tutorialFinger || !tutorialRipple || !perfPanel || !perfOutput ||
   !levelActions || !rulesContainer
 ) {
   throw new Error('Missing required UI element');
@@ -183,6 +195,8 @@ let renderedRulesKey = '';
 let layoutStopRequested = false;
 let tutorialRunning = false;
 let tutorialAbort: AbortController | null = null;
+let renderQueued = false;
+let queuedRenderRefresh = false;
 
 // Tutorial lasso tuning: decrease this if the ghost lasso catches nearby nodes,
 // increase it if the lasso feels too tight around the highlighted rewrite.
@@ -251,6 +265,56 @@ const loadPuzzle = (puzzleId: string) => {
 };
 
 const releaseLayoutStep = () => {};
+
+const requestRender = (reason: string, refresh = true) => {
+  perf.count(`render.request.${reason}`);
+  queuedRenderRefresh = queuedRenderRefresh || refresh;
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    const shouldRefresh = queuedRenderRefresh;
+    renderQueued = false;
+    queuedRenderRefresh = false;
+    render(shouldRefresh);
+  });
+};
+
+const formatPerfRows = () => {
+  const rows = perf.snapshot();
+  if (rows.length === 0) return 'No samples yet. Lasso or apply a rewrite.';
+  const head = 'name                         count   total    avg    max';
+  const body = rows.slice(0, 14).map((row) => [
+    row.name.padEnd(28).slice(0, 28),
+    String(row.count).padStart(5),
+    `${row.totalMs.toFixed(1)}ms`.padStart(8),
+    `${row.avgMs.toFixed(3)}ms`.padStart(8),
+    `${row.maxMs.toFixed(1)}ms`.padStart(7)
+  ].join(' '));
+  return [head, ...body].join('\n');
+};
+
+let perfPanelTimer: number | undefined;
+
+const updatePerfPanel = () => {
+  if (!perf.enabled || perfPanel.hidden) return;
+  perfOutput.textContent = formatPerfRows();
+};
+
+const showPerfPanel = () => {
+  if (!perf.enabled) return;
+  perfPanel.hidden = false;
+  updatePerfPanel();
+  window.clearInterval(perfPanelTimer);
+  perfPanelTimer = window.setInterval(updatePerfPanel, 1000);
+};
+
+const hidePerfPanel = () => {
+  perfPanel.hidden = true;
+  window.clearInterval(perfPanelTimer);
+  perfPanelTimer = undefined;
+};
+
+if (perf.enabled) showPerfPanel();
 
 const bumpMoves = () => {
   moveCount += 1;
@@ -1048,7 +1112,7 @@ const evaluateSelection = (panels: PanelMap) => {
     cuts: [],
     cycleOrder: []
   };
-  rules = adapter.evaluateSelection(currentSelection);
+  rules = perf.time('ocaml.evaluateSelection', () => adapter.evaluateSelection(currentSelection));
   if (!rules.some((r) => r.enabled)) {
     const why = rules.map((r) => `${r.name}: ${r.reason ?? 'not applicable'}`).join(' | ');
     scene.messages = [`No rule matches this ${graphId} selection (${selected.length} nodes).`, why];
@@ -1260,14 +1324,21 @@ const panelsForSize = (cssW: number, cssH: number): PanelMap => {
   };
 };
 
-const render = () => {
+const render = (refresh = true) => {
+  const endRender = perf.begin('render.total');
   const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
   const rect = canvas.getBoundingClientRect();
   const cssW = Math.max(1, Math.floor(rect.width));
   const cssH = Math.max(1, Math.floor(rect.height));
-  canvas.width = Math.floor(cssW * dpr);
-  canvas.height = Math.floor(cssH * dpr);
+  const pixelW = Math.floor(cssW * dpr);
+  const pixelH = Math.floor(cssH * dpr);
+  if (canvas.width !== pixelW || canvas.height !== pixelH) {
+    canvas.width = pixelW;
+    canvas.height = pixelH;
+    perf.count('render.canvasResize');
+  }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const endCanvas = perf.begin('render.canvas');
   ctx.clearRect(0, 0, cssW, cssH);
 
   const panels = panelsForSize(cssW, cssH);
@@ -1292,7 +1363,13 @@ const render = () => {
     ctx.stroke();
   }
   drawLasso();
-  refreshUi();
+  endCanvas();
+  if (refresh) {
+    const endUi = perf.begin('render.ui');
+    refreshUi();
+    endUi();
+  }
+  endRender();
 };
 
 const canvasPoint = (clientX: number, clientY: number): Point => {
@@ -1303,14 +1380,14 @@ const canvasPoint = (clientX: number, clientY: number): Point => {
 const startDrag = (p: Point) => {
   dragging = true;
   lasso = [p];
-  render();
+  render(false);
 };
 
 const moveDrag = (p: Point) => {
   if (!dragging) return;
   const q = lasso[lasso.length - 1];
   if (!q || (p.x - q.x) ** 2 + (p.y - q.y) ** 2 > 16) lasso.push(p);
-  render();
+  requestRender('lasso', false);
 };
 
 const finishDrag = (p: Point) => {
@@ -1349,7 +1426,7 @@ const applyRuleFromButton = async (btn: HTMLButtonElement) => {
   const selection = { ...currentSelection, selectedNodeIds: [...currentSelection.selectedNodeIds] };
   const seed = seedFromCurrentLayout(selection);
   const collapseCenter = layoutCenterFromCurrentSelection(selection);
-  const res = adapter.applyRule(name, selection);
+  const res = perf.time('ocaml.applyRule', () => adapter.applyRule(name, selection));
   if (res.ok && res.scene) {
     bumpMoves();
     const solved = res.scene.messages.some((m) => m.includes('You just made a proof'));
@@ -1408,6 +1485,21 @@ if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).Pointer
 }
 
 document.addEventListener('click', (e) => {
+  const perfActionEl = (e.target as Element | null)?.closest<HTMLElement>('[data-perf-action]');
+  if (perfActionEl) {
+    const action = perfActionEl.dataset.perfAction;
+    if (action === 'reset') {
+      perf.reset();
+      updatePerfPanel();
+    } else if (action === 'copy') {
+      const text = JSON.stringify(perf.snapshot(), null, 2);
+      void navigator.clipboard?.writeText(text).catch(() => undefined);
+      perfOutput.textContent = `${formatPerfRows()}\n\nCopied JSON if clipboard access is available.`;
+    } else if (action === 'hide') {
+      hidePerfPanel();
+    }
+    return;
+  }
   const actionEl = (e.target as Element | null)?.closest<HTMLElement>('[data-action]');
   if (!actionEl) return;
   const action = actionEl.dataset.action;
@@ -1470,10 +1562,10 @@ levelActions.addEventListener('change', () => {
 });
 
 if (typeof (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver !== 'undefined') {
-  const ro = new ResizeObserver(() => render());
+  const ro = new ResizeObserver(() => requestRender('resize', false));
   ro.observe(canvas);
 } else {
-  window.addEventListener('resize', () => render());
+  window.addEventListener('resize', () => requestRender('resize', false));
 }
 
 void layoutScene(scene);

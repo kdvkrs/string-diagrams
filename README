@@ -30,6 +30,9 @@ upstream research editor.
 
 ## Prototype demo
 
+The current prototype direction is captured in
+[`docs/prototype-vision.md`](docs/prototype-vision.md).
+
 Build the web-next prototype:
 
 ```sh

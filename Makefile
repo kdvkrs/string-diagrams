@@ -38,7 +38,13 @@ web-next-dev:: web-next-bridge
 web-next-build:: web-next-bridge
 	cd web-next && npm run build
 
+web-next-build-perf:: web-next-bridge
+	cd web-next && npm run build:perf
+
 web-next-serve:: web-next-build
+	python3 -m http.server 8080 --directory web-next/dist
+
+web-next-serve-perf:: web-next-build-perf
 	python3 -m http.server 8080 --directory web-next/dist
 
 archive:
