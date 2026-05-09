@@ -59,10 +59,18 @@ Useful checks:
   `render.request.lasso`.
 - Apply a rewrite in Level 4 and inspect `physics.replay.tick`,
   `physics.replay.materialize`, `render.total`, and `ocaml.applyRule`.
+- Use the panel's `Cross` button, or open `?perf=1&debugCrossings=1`, to run
+  the heavier unintended-crossing diagnostic.
+- Use the panel's `Sel` button, or open `?perf=1&debugSelection=1`, to compare
+  canonical selection against the old permutation matcher in debug messages.
 - Use `PuzzlePerf.reset()` between runs.
 
 The same build also supports `PuzzlePerf.setEnabled(true)` or
 `localStorage.sdPerf = "1"` if adding `?perf=1` is inconvenient.
+
+Plain `?perf=1` is intended to approximate production behavior. The crossing
+and selection-debug switches are intentionally opt-in because they add
+diagnostic work that is not present in the visitor-facing build.
 
 On tablets, the performance panel is usually easier than remote debugging. Use
 its `Copy` button to copy the same JSON returned by `PuzzlePerf.report()`.

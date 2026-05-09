@@ -118,6 +118,8 @@ app.innerHTML = `
   <div class="perf-panel" id="perf-panel" hidden>
     <div class="perf-head">
       <strong>Perf</strong>
+      <button type="button" data-perf-action="crossings">Cross</button>
+      <button type="button" data-perf-action="selection">Sel</button>
       <button type="button" data-perf-action="reset">Reset</button>
       <button type="button" data-perf-action="copy">Copy</button>
       <button type="button" data-perf-action="hide">Hide</button>
@@ -283,8 +285,11 @@ const requestRender = (reason: string, refresh = true) => {
 
 const formatPerfRows = () => {
   const rows = perf.snapshot();
-  const crossingLine = `unintended crossings: ${debugCrossings.length}`;
-  if (rows.length === 0) return `No samples yet. Lasso or apply a rewrite.\n${crossingLine}`;
+  const crossingLine = perf.debugCrossings
+    ? `unintended crossings: ${debugCrossings.length}`
+    : 'unintended crossings: off';
+  const selectionLine = `selection fallback debug: ${perf.debugSelection ? 'on' : 'off'}`;
+  if (rows.length === 0) return `No samples yet. Lasso or apply a rewrite.\n${crossingLine}\n${selectionLine}`;
   const head = 'name                         count   total    avg    max';
   const body = rows.slice(0, 14).map((row) => [
     row.name.padEnd(28).slice(0, 28),
@@ -294,7 +299,7 @@ const formatPerfRows = () => {
     `${row.maxMs.toFixed(1)}ms`.padStart(7)
   ].join(' '));
   const crossingDetails = debugCrossings.slice(0, 6).map((c) => `  ${c.graphId}: ${c.edgeA} × ${c.edgeB}`);
-  return [crossingLine, ...crossingDetails, '', head, ...body].join('\n');
+  return [crossingLine, selectionLine, ...crossingDetails, '', head, ...body].join('\n');
 };
 
 let perfPanelTimer: number | undefined;
@@ -901,7 +906,7 @@ const crossingIsAtExplicitNode = (g: LayoutGraph, p: LayoutPoint) =>
   });
 
 const crossingDiagnosticsForGraph = (g: LayoutGraph, view: View): CrossingDiagnostic[] => {
-  if (!perf.enabled) return [];
+  if (!perf.debugCrossings) return [];
   const out: CrossingDiagnostic[] = [];
   const sampled = g.edges.map((edge) => ({ edge, samples: edgeSamples(edge.points) }));
   for (let i = 0; i < sampled.length; i += 1) {
@@ -1192,7 +1197,7 @@ const evaluateSelection = (panels: PanelMap) => {
     polygon: [],
     cuts: [],
     cycleOrder: [],
-    debug: perf.enabled
+    debug: perf.debugSelection
   };
   rules = perf.time('ocaml.evaluateSelection', () => adapter.evaluateSelection(currentSelection));
   if (!rules.some((r) => r.enabled)) {
@@ -1435,7 +1440,7 @@ const render = (refresh = true) => {
   else drawPendingGraph(panels.lhs);
   if (rhs && rhsView) drawLayoutGraph(rhs, panels.rhs, selectedRhs, rhsView);
   else drawPendingGraph(panels.rhs);
-  debugCrossings = perf.enabled
+  debugCrossings = perf.debugCrossings
     ? perf.time('debug.crossings', () => [
         ...(lhs && lhsView ? crossingDiagnosticsForGraph(lhs, lhsView) : []),
         ...(rhs && rhsView ? crossingDiagnosticsForGraph(rhs, rhsView) : [])
@@ -1599,6 +1604,13 @@ document.addEventListener('click', (e) => {
     const action = perfActionEl.dataset.perfAction;
     if (action === 'reset') {
       perf.reset();
+      updatePerfPanel();
+    } else if (action === 'crossings') {
+      perf.setDebugCrossings(!perf.debugCrossings);
+      requestRender('debug-crossings');
+      updatePerfPanel();
+    } else if (action === 'selection') {
+      perf.setDebugSelection(!perf.debugSelection);
       updatePerfPanel();
     } else if (action === 'copy') {
       const text = JSON.stringify(perf.snapshot(), null, 2);

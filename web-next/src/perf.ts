@@ -13,9 +13,20 @@ export type PerfRow = {
 };
 
 const buildEnabled = import.meta.env.VITE_ENABLE_PERF === '1';
+const params = new URLSearchParams(window.location.search);
+const hasPerfParam = params.has('perf');
+
 let enabled = buildEnabled && (
-  new URLSearchParams(window.location.search).has('perf') ||
+  hasPerfParam ||
   window.localStorage.getItem('sdPerf') === '1'
+);
+let debugCrossings = enabled && (
+  params.has('debugCrossings') ||
+  (!hasPerfParam && window.localStorage.getItem('sdDebugCrossings') === '1')
+);
+let debugSelection = enabled && (
+  params.has('debugSelection') ||
+  (!hasPerfParam && window.localStorage.getItem('sdDebugSelection') === '1')
 );
 
 const metrics = new Map<string, Metric>();
@@ -84,9 +95,29 @@ const setEnabled = (next: boolean) => {
     return false;
   }
   enabled = next;
+  if (!enabled) {
+    debugCrossings = false;
+    debugSelection = false;
+  }
   window.localStorage.setItem('sdPerf', next ? '1' : '0');
   console.info(`PuzzlePerf ${next ? 'enabled' : 'disabled'}.`);
   return enabled;
+};
+
+const setDebugCrossings = (next: boolean) => {
+  if (!setEnabled(enabled || next)) return false;
+  debugCrossings = enabled && next;
+  window.localStorage.setItem('sdDebugCrossings', debugCrossings ? '1' : '0');
+  console.info(`PuzzlePerf crossing diagnostics ${debugCrossings ? 'enabled' : 'disabled'}.`);
+  return debugCrossings;
+};
+
+const setDebugSelection = (next: boolean) => {
+  if (!setEnabled(enabled || next)) return false;
+  debugSelection = enabled && next;
+  window.localStorage.setItem('sdDebugSelection', debugSelection ? '1' : '0');
+  console.info(`PuzzlePerf selection fallback diagnostics ${debugSelection ? 'enabled' : 'disabled'}.`);
+  return debugSelection;
 };
 
 export const perf = {
@@ -96,11 +127,19 @@ export const perf = {
   get buildEnabled() {
     return buildEnabled;
   },
+  get debugCrossings() {
+    return debugCrossings;
+  },
+  get debugSelection() {
+    return debugSelection;
+  },
   begin,
   count,
   record,
   report,
   reset,
+  setDebugCrossings,
+  setDebugSelection,
   setEnabled,
   snapshot,
   time
@@ -115,7 +154,7 @@ declare global {
 if (buildEnabled) {
   window.PuzzlePerf = perf;
   if (enabled) {
-    console.info('PuzzlePerf enabled. Use PuzzlePerf.report(), PuzzlePerf.reset(), or PuzzlePerf.setEnabled(false).');
+    console.info('PuzzlePerf enabled. Use PuzzlePerf.report(), PuzzlePerf.reset(), PuzzlePerf.setDebugCrossings(true), or PuzzlePerf.setDebugSelection(true).');
   } else {
     console.info('PuzzlePerf available. Use PuzzlePerf.setEnabled(true), localStorage.sdPerf=1, or ?perf=1.');
   }
