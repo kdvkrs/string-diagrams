@@ -1,0 +1,25 @@
+{
+  "name": "String Diagram Proof Puzzle",
+  "short_name": "Proof Puzzle",
+  "description": "A tablet-friendly visual proof puzzle for string-diagram rewriting.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#eef3f8",
+  "theme_color": "#eef3f8",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

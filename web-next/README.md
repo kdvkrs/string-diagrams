@@ -38,6 +38,20 @@ make web-next-serve
 Do not open `web-next/index.html` directly with a `file://` URL. It is the Vite
 source entrypoint, not the built app.
 
+## iPad home-screen mode
+
+The prototype includes minimal PWA metadata for kiosk-style demos. It is still a
+local-LAN web app, not an offline app.
+
+1. Serve the built app with `make web-next-serve`.
+2. Open `http://<server-ip>:8080/` in Safari on the iPad.
+3. Use Share -> Add to Home Screen.
+4. Launch the saved `Proof Puzzle` icon for a browser-bar-free standalone view.
+
+The page also disables text selection and common Safari pinch/double-tap zoom
+gestures around the UI. iOS accessibility zoom can still override page-level
+settings.
+
 ## Optional performance instrumentation
 
 Normal production builds do not include active profiling. For browser profiling:

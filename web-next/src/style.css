@@ -29,14 +29,20 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
 }
 
 button {
   font-family: inherit;
   -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 #app {
@@ -144,22 +150,12 @@ button {
   touch-action: none;
 }
 
-.stage-label {
-  position: absolute;
-  z-index: 1;
-  top: 14px;
-  left: 16px;
-  pointer-events: none;
-  color: var(--ink-soft);
-  font: 600 11px/1 var(--font);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 #stage {
   display: block;
   width: 100%;
   height: 100%;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .btn {
@@ -667,6 +663,9 @@ pre {
   color: #263a50;
   font: 500 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
   white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 @media (max-width: 980px) {

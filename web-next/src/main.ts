@@ -20,6 +20,29 @@ const DEFAULT_PUZZLE_ID = 'composite-monad-left-unit';
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app root');
 
+const installKioskGestureGuards = () => {
+  const prevent = (event: Event) => event.preventDefault();
+  const options: AddEventListenerOptions = { passive: false };
+
+  // iOS Safari still exposes non-standard gesture events for pinch zoom.
+  document.addEventListener('gesturestart', prevent, options);
+  document.addEventListener('gesturechange', prevent, options);
+  document.addEventListener('gestureend', prevent, options);
+
+  let lastTouchEnd = 0;
+  document.addEventListener(
+    'touchend',
+    (event) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 350) event.preventDefault();
+      lastTouchEnd = now;
+    },
+    options
+  );
+};
+
+installKioskGestureGuards();
+
 app.innerHTML = `
   <header class="topbar">
     <div class="left">
@@ -43,7 +66,6 @@ app.innerHTML = `
   </header>
   <main class="stages">
     <div class="stage">
-      <span class="stage-label">Puzzle</span>
       <canvas id="stage" aria-label="diagram stage"></canvas>
     </div>
     <div id="success-modal" role="dialog" aria-modal="true" aria-labelledby="success-title">
