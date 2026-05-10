@@ -468,6 +468,13 @@ body.tut-on .stage::after {
   border: 1px solid var(--paper-edge);
   border-radius: 8px;
   background: var(--paper);
+  overflow: hidden;
+}
+
+.rule-preview-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .move-counter {

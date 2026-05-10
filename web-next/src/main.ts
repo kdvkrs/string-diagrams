@@ -124,7 +124,7 @@ app.innerHTML = `
         </div>
         <button class="rule tutorial-rule" id="tutorial-rule-card" type="button">
           <div class="rule-meta"><span class="rule-badge">Move</span><span class="rule-name">checked rule</span></div>
-          <canvas class="tutorial-rule-preview" id="tutorial-rule-preview" width="260" height="96"></canvas>
+          <div class="tutorial-rule-preview" id="tutorial-rule-preview" aria-hidden="true"></div>
         </button>
       </div>
     </div>
@@ -169,7 +169,7 @@ const helpPanel = document.querySelector<HTMLElement>('#help-panel');
 const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
 const tutorialCanvas = document.querySelector<HTMLCanvasElement>('#tutorial-stage');
 const tutorialRuleCard = document.querySelector<HTMLButtonElement>('#tutorial-rule-card');
-const tutorialRulePreview = document.querySelector<HTMLCanvasElement>('#tutorial-rule-preview');
+const tutorialRulePreview = document.querySelector<HTMLElement>('#tutorial-rule-preview');
 const confettiCanvas = document.querySelector<HTMLCanvasElement>('#confetti-canvas');
 const tutorialCaption = document.querySelector<HTMLElement>('#tutorial-caption');
 const tutorialFinger = document.querySelector<HTMLElement>('#tutorial-finger');
@@ -1305,61 +1305,114 @@ const spreadPreviewUnitTriangles = (g: LayoutGraph): LayoutGraph => {
   };
 };
 
-const drawGraphPreview = (c: CanvasRenderingContext2D, graph: LayoutGraph, panel: Rect) => {
+const escAttr = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const svgSmoothPath = (points: Point[]) => {
+  if (points.length < 2) return '';
+  const fmt = (n: number) => Number(n.toFixed(2));
+  const start = `M ${fmt(points[0].x)} ${fmt(points[0].y)}`;
+  if (points.length === 4) {
+    return `${start} C ${fmt(points[1].x)} ${fmt(points[1].y)} ${fmt(points[2].x)} ${fmt(points[2].y)} ${fmt(points[3].x)} ${fmt(points[3].y)}`;
+  }
+  if (points.length === 2) {
+    const p0 = points[0];
+    const p1 = points[1];
+    const dy = Math.max(18, Math.abs(p1.y - p0.y) * 0.45);
+    return `${start} C ${fmt(p0.x)} ${fmt(p0.y + dy)} ${fmt(p1.x)} ${fmt(p1.y - dy)} ${fmt(p1.x)} ${fmt(p1.y)}`;
+  }
+  const parts = [start];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const mid = { x: (points[i].x + points[i + 1].x) * 0.5, y: (points[i].y + points[i + 1].y) * 0.5 };
+    parts.push(`Q ${fmt(points[i].x)} ${fmt(points[i].y)} ${fmt(mid.x)} ${fmt(mid.y)}`);
+  }
+  const last = points[points.length - 1];
+  parts.push(`L ${fmt(last.x)} ${fmt(last.y)}`);
+  return parts.join(' ');
+};
+
+const svgNode = (node: LayoutNode, view: View) => {
+  const center = toScreen({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }, view);
+  const minW = node.boundary ? 4 : 5;
+  const minH = node.boundary ? 4 : 5;
+  const w = Math.max(minW, node.w * view.scale * 0.78);
+  const h = Math.max(minH, node.h * view.scale * 0.78);
+  const x = center.x - w * 0.5;
+  const y = center.y - h * 0.5;
+  if (node.boundary) {
+    const r = Math.min(2.4, Math.max(1.5, Math.min(w, h) * 0.28));
+    return `<circle cx="${center.x.toFixed(2)}" cy="${center.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${escAttr(cssVar('--pin', '#9aa8b8'))}" />`;
+  }
+  const fill = escAttr(node.color || '#7f8c8d');
+  const stroke = '#243949';
+  if (node.shape === 'circle' || node.shape === 'cross') {
+    const r = Math.max(w, h) * 0.5;
+    return `<circle cx="${center.x.toFixed(2)}" cy="${center.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${fill}" stroke="${stroke}" stroke-width="0.75" />`;
+  }
+  if (node.shape === 'triangle') {
+    const points = `${x.toFixed(2)},${y.toFixed(2)} ${(x + w).toFixed(2)},${y.toFixed(2)} ${(x + w * 0.5).toFixed(2)},${(y + h).toFixed(2)}`;
+    return `<polygon points="${points}" fill="${fill}" stroke="${stroke}" stroke-width="0.75" />`;
+  }
+  return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="0.75" />`;
+};
+
+const svgGraphPreview = (graph: LayoutGraph, panel: Rect) => {
   const g = spreadPreviewUnitTriangles(graph);
   const hasZeroInput = g.nodes.some((node) => !node.boundary && node.shape === 'triangle' && node.inputs === 0);
   const view = previewViewForLayout(g, panel, hasZeroInput ? 1.18 : 0.9, hasZeroInput);
-  c.save();
-  c.beginPath();
-  c.rect(panel.x, panel.y, panel.w, panel.h);
-  c.clip();
-  g.edges.forEach((edge) => {
-    c.strokeStyle = edge.color || '#2f4f67';
-    c.lineWidth = 1.8;
-    strokeSmoothPolyline(c, edge.points.map((p) => toScreen(p, view)));
-  });
-  g.nodes.forEach((node) => drawNode(c, node, view, new Set(), true));
-  c.restore();
+  const clipId = `clip-${Math.random().toString(36).slice(2)}`;
+  const edges = g.edges
+    .map((edge) => {
+      const d = svgSmoothPath(edge.points.map((p) => toScreen(p, view)));
+      if (!d) return '';
+      return `<path d="${d}" fill="none" stroke="${escAttr(edge.color || '#2f4f67')}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />`;
+    })
+    .join('');
+  const nodes = g.nodes.map((node) => svgNode(node, view)).join('');
+  return `
+    <clipPath id="${clipId}"><rect x="${panel.x}" y="${panel.y}" width="${panel.w}" height="${panel.h}" /></clipPath>
+    <g clip-path="url(#${clipId})">${edges}${nodes}</g>
+  `;
 };
 
-const drawRulePreviewGraphs = (canvasEl: HTMLCanvasElement, rule: { lhs: LayoutGraph; rhs: LayoutGraph }, dimmed: boolean) => {
-  canvasEl.width = Math.max(220, Math.floor(canvasEl.clientWidth || 220));
-  canvasEl.height = Math.max(92, Math.floor(canvasEl.clientHeight || 92));
-  const c = canvasEl.getContext('2d');
-  if (!c) return;
-  c.clearRect(0, 0, canvasEl.width, canvasEl.height);
-  c.fillStyle = dimmed ? '#f2f6fb' : '#fbfdff';
-  c.fillRect(0, 0, canvasEl.width, canvasEl.height);
+const rulePreviewSvg = (rule: { lhs: LayoutGraph; rhs: LayoutGraph }, width: number, height: number, dimmed: boolean) => {
   const gutter = 30;
   const pad = 5;
   const hasZeroInput = [...rule.lhs.nodes, ...rule.rhs.nodes].some((node) => !node.boundary && node.shape === 'triangle');
   const verticalInset = hasZeroInput ? -7 : 0;
-  const sideW = (canvasEl.width - gutter - pad * 2) * 0.5;
-  const left: Rect = { x: pad, y: pad + verticalInset, w: sideW, h: canvasEl.height - pad * 2 - verticalInset * 2 };
-  const right: Rect = { x: pad + sideW + gutter, y: pad + verticalInset, w: sideW, h: canvasEl.height - pad * 2 - verticalInset * 2 };
-  drawGraphPreview(c, rule.lhs, left);
-  drawGraphPreview(c, rule.rhs, right);
-  drawPlainEquals(c, canvasEl.width * 0.5, canvasEl.height * 0.5, 24);
+  const sideW = (width - gutter - pad * 2) * 0.5;
+  const left: Rect = { x: pad, y: pad + verticalInset, w: sideW, h: height - pad * 2 - verticalInset * 2 };
+  const right: Rect = { x: pad + sideW + gutter, y: pad + verticalInset, w: sideW, h: height - pad * 2 - verticalInset * 2 };
+  return `
+    <svg class="rule-preview-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="rewrite rule preview" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${width}" height="${height}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
+      ${svgGraphPreview(rule.lhs, left)}
+      ${svgGraphPreview(rule.rhs, right)}
+      <text x="${width * 0.5}" y="${height * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#47607a" font-family="Avenir Next, sans-serif" font-size="24" font-weight="900">=</text>
+    </svg>
+  `;
 };
 
-const drawRulePreview = (canvasEl: HTMLCanvasElement, name: string, dimmed: boolean) => {
-  canvasEl.width = Math.max(220, Math.floor(canvasEl.clientWidth || 220));
-  canvasEl.height = Math.max(92, Math.floor(canvasEl.clientHeight || 92));
-  const c = canvasEl.getContext('2d');
-  if (!c) return;
+const drawRulePreviewGraphs = (container: HTMLElement, rule: { lhs: LayoutGraph; rhs: LayoutGraph }, dimmed: boolean) => {
+  const width = Math.max(220, Math.floor(container.clientWidth || 220));
+  const height = Math.max(92, Math.floor(container.clientHeight || 92));
+  container.innerHTML = rulePreviewSvg(rule, width, height, dimmed);
+};
+
+const drawRulePreview = (container: HTMLElement, name: string, dimmed: boolean) => {
+  const width = Math.max(220, Math.floor(container.clientWidth || 220));
+  const height = Math.max(92, Math.floor(container.clientHeight || 92));
   const rule = layouts?.rules.get(name);
   if (!rule) {
-    c.clearRect(0, 0, canvasEl.width, canvasEl.height);
-    c.fillStyle = dimmed ? '#f2f6fb' : '#fbfdff';
-    c.fillRect(0, 0, canvasEl.width, canvasEl.height);
-    c.fillStyle = '#8da0b3';
-    c.font = '600 11px "Avenir Next", sans-serif';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillText('layout...', canvasEl.width * 0.5, canvasEl.height * 0.5);
+    container.innerHTML = `
+      <svg class="rule-preview-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="rewrite rule preview loading" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${width}" height="${height}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
+        <text x="${width * 0.5}" y="${height * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">layout...</text>
+      </svg>
+    `;
     return;
   }
-  drawRulePreviewGraphs(canvasEl, rule, dimmed);
+  drawRulePreviewGraphs(container, rule, dimmed);
 };
 
 const renderLevelButtons = () => {
@@ -1412,11 +1465,11 @@ const refreshUi = () => {
       btn.title = ra.enabled ? `Apply ${name}` : ra.reason ?? 'Not applicable';
       btn.innerHTML = `
         <div class="rule-meta"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
-        <canvas class="rule-preview" width="220" height="120"></canvas>
+        <div class="rule-preview" aria-hidden="true"></div>
       `;
       const nameEl = btn.querySelector<HTMLElement>('.rule-name');
       if (nameEl) nameEl.textContent = name;
-      const pv = btn.querySelector<HTMLCanvasElement>('.rule-preview');
+      const pv = btn.querySelector<HTMLElement>('.rule-preview');
       if (pv) drawRulePreview(pv, name, dimmed);
       return btn;
     })
