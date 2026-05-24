@@ -10,18 +10,19 @@ type Rect = { x: number; y: number; w: number; h: number };
 type View = { scale: number; tx: number; ty: number };
 type PanelMap = { lhs: Rect; rhs: Rect };
 type CrossingDiagnostic = { graphId: string; edgeA: string; edgeB: string; point: Point };
-type TutorialPlacement = 'top' | 'right' | 'bottom' | 'left';
-type TutorialFocusRect = 'lhs' | 'rhs';
-type TutorialRelativeRect = { x: number; y: number; w: number; h: number };
-type TutorialStep = {
+type AssistPlacement = 'top' | 'right' | 'bottom' | 'left';
+type AssistFocusRect = 'lhs' | 'rhs';
+type AssistRelativeRect = { x: number; y: number; w: number; h: number };
+type AssistStep = {
   selector: string;
   padding: number;
-  focusRect?: TutorialFocusRect;
-  lassoRect?: TutorialRelativeRect;
+  focusRect?: AssistFocusRect;
+  lassoRect?: AssistRelativeRect;
+  before?: 'select-level-1' | 'apply-level-1';
   kicker: string;
   title: string;
   body: string;
-  placement: TutorialPlacement;
+  placement: AssistPlacement;
   demo?: 'lasso';
 };
 type LayoutState = {
@@ -30,16 +31,16 @@ type LayoutState = {
 };
 
 const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
-const TUTORIAL_STAGE_SELECTOR = '.stage';
+const ASSIST_STAGE_SELECTOR = '.stage';
 
-const TUTORIAL_STEPS_BEGINNER: TutorialStep[] = [
+const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
   {
-    selector: TUTORIAL_STAGE_SELECTOR,
+    selector: ASSIST_STAGE_SELECTOR,
     padding: 8,
     focusRect: 'lhs',
     // Manual tuning hook: relative to the focused LHS region, not the whole viewport.
     lassoRect: { x: 0.18, y: 0.18, w: 0.42, h: 0.46 },
-    kicker: 'Step 1 of 3',
+    kicker: 'Step 1 of 4',
     title: 'Circle a tangle',
     body: 'Drag your finger around a small piece of the diagram on the left to select it.',
     placement: 'right',
@@ -48,26 +49,43 @@ const TUTORIAL_STEPS_BEGINNER: TutorialStep[] = [
   {
     selector: '#rules',
     padding: 8,
-    kicker: 'Step 2 of 3',
+    before: 'select-level-1',
+    kicker: 'Step 2 of 4',
     title: 'Pick a move that fits',
     body: 'When your selection matches a rule, that card lights up. Tap it to apply the move.',
     placement: 'top'
   },
   {
-    selector: TUTORIAL_STAGE_SELECTOR,
+    selector: ASSIST_STAGE_SELECTOR,
     padding: 8,
-    focusRect: 'rhs',
-    kicker: 'Step 3 of 3',
+    focusRect: 'lhs',
+    before: 'apply-level-1',
+    kicker: 'Step 3 of 4',
+    title: 'That part transformed',
+    body: 'The selected tangle was replaced by a simpler piece. That rewrite was checked.',
+    placement: 'right'
+  },
+  {
+    selector: ASSIST_STAGE_SELECTOR,
+    padding: 8,
+    kicker: 'Step 4 of 4',
     title: 'Match both sides',
-    body: 'Keep making moves until the left side looks like the right. That’s your proof.',
-    placement: 'left'
+    body: 'Keep making checked moves until the diagrams on both sides match.',
+    placement: 'top'
   }
 ];
 
-const TUTORIAL_STEPS_REFRESHER = TUTORIAL_STEPS_BEGINNER.slice(1).map((step, idx, steps): TutorialStep => ({
-  ...step,
-  kicker: `Step ${idx + 1} of ${steps.length}`
-}));
+const ASSIST_STEPS_LEVEL_3: AssistStep[] = [
+  {
+    selector: ASSIST_STAGE_SELECTOR,
+    padding: 8,
+    focusRect: 'rhs',
+    kicker: 'Hint',
+    title: 'You can also transform the right side',
+    body: 'In this level, you will have to manipulate both diagrams to get them to match.',
+    placement: 'left'
+  }
+];
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app root');
@@ -165,16 +183,45 @@ app.innerHTML = `
         <div class="proof-head">
           <div>
             <div class="proof-kicker">How to play</div>
-            <h2>Make only legal moves</h2>
+            <h2>Make the diagrams match</h2>
           </div>
           <button class="btn" data-action="close-help">Close</button>
         </div>
-        <p>Lasso a small tangle of boxes and strings. If a move card lights up, tap it to rewrite that part of the diagram.</p>
-        <p>The point: each move is checked by the proof engine. When the diagrams match, you made a proof.</p>
+        <p>Your goal is to transform the diagrams on either side until both sides match.</p>
+        <p>Use the rewriting rules at the bottom of the screen: select a part of a diagram that matches a rule, then press that rule to transform the selected part.</p>
+        <p>Every move is checked by the proof engine. When the diagrams match, you have made a proof.</p>
+      </div>
+    </div>
+    <div id="tutorial-panel" aria-live="polite">
+      <div class="tutorial-card">
+        <div class="proof-head">
+          <div>
+            <div class="proof-kicker">How to play</div>
+            <h2>Make the diagrams match</h2>
+          </div>
+          <button class="btn" data-action="close-tutorial">Close</button>
+        </div>
+        <p class="tutorial-copy">Your goal is to transform the diagrams on either side until both sides match. Select a part that matches a rule, then press that rule to transform it.</p>
+        <div class="tutorial-stage-wrap">
+          <canvas id="tutorial-stage" aria-label="tutorial diagram stage"></canvas>
+        </div>
+        <button class="rule tutorial-rule" id="tutorial-rule-card" type="button">
+          <div class="rule-meta"><span class="rule-badge">Move</span><span class="rule-name">checked rule</span></div>
+          <div class="tutorial-rule-preview" id="tutorial-rule-preview" aria-hidden="true"></div>
+        </button>
+      </div>
+    </div>
+    <div id="assist-welcome-panel">
+      <div class="assist-welcome-card">
+        <div class="modal-title">Can you untangle the proof?</div>
+        <div class="modal-body">Your goal in this puzzle is to get both diagrams to match.</div>
+        <div class="modal-actions">
+          <button class="btn btn--primary" data-action="assist-start">Start demo</button>
+        </div>
       </div>
     </div>
   </main>
-  <div class="tut-root" id="tutorial-root" aria-hidden="true">
+  <div class="tut-root" id="tutorial-root" aria-hidden="true" hidden>
     <svg class="tut-veil" id="tutorial-veil" preserveAspectRatio="none">
       <defs>
         <mask id="tutorial-mask" maskUnits="userSpaceOnUse">
@@ -196,12 +243,20 @@ app.innerHTML = `
       <div class="tut-card-foot">
         <div class="tut-dots" id="tutorial-dots"></div>
         <div class="tut-actions">
-          <button class="tut-btn tut-btn--ghost" data-action="tutorial-skip">Skip</button>
-          <button class="tut-btn tut-btn--primary" data-action="tutorial-next" id="tutorial-next">Next</button>
+          <button class="tut-btn tut-btn--ghost" data-action="assist-skip">Skip</button>
+          <button class="tut-btn tut-btn--primary" data-action="assist-next" id="tutorial-next">Next</button>
         </div>
       </div>
     </div>
   </div>
+  <div class="tut-caption" id="tutorial-caption" aria-hidden="true">Circle a real rewrite</div>
+  <div class="tut-finger" id="tutorial-finger" aria-hidden="true">
+    <svg viewBox="0 0 56 64">
+      <ellipse cx="28" cy="28" rx="16" ry="20" fill="rgba(255,255,255,.88)" stroke="rgba(20,30,45,.55)" stroke-width="1.4"/>
+      <ellipse cx="24" cy="22" rx="5" ry="8" fill="rgba(255,255,255,.96)"/>
+    </svg>
+  </div>
+  <div class="tut-ripple" id="tutorial-ripple"></div>
   <div class="perf-panel" id="perf-panel" hidden>
     <div class="perf-head">
       <strong>Perf</strong>
@@ -231,6 +286,11 @@ const moveCounter = document.querySelector<HTMLElement>('[data-move-counter]');
 const successModal = document.querySelector<HTMLElement>('#success-modal');
 const proofPanel = document.querySelector<HTMLElement>('#proof-panel');
 const helpPanel = document.querySelector<HTMLElement>('#help-panel');
+const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
+const assistWelcomePanel = document.querySelector<HTMLElement>('#assist-welcome-panel');
+const tutorialCanvas = document.querySelector<HTMLCanvasElement>('#tutorial-stage');
+const tutorialRuleCard = document.querySelector<HTMLButtonElement>('#tutorial-rule-card');
+const tutorialRulePreview = document.querySelector<HTMLElement>('#tutorial-rule-preview');
 const tutorialRoot = document.querySelector<HTMLElement>('#tutorial-root');
 const tutorialVeil = document.querySelector<SVGSVGElement>('#tutorial-veil');
 const tutorialMaskCutout = document.querySelector<SVGRectElement>('#tutorial-mask-cutout');
@@ -243,20 +303,27 @@ const tutorialBody = document.querySelector<HTMLElement>('#tutorial-body');
 const tutorialDots = document.querySelector<HTMLElement>('#tutorial-dots');
 const tutorialNext = document.querySelector<HTMLButtonElement>('#tutorial-next');
 const confettiCanvas = document.querySelector<HTMLCanvasElement>('#confetti-canvas');
+const tutorialCaption = document.querySelector<HTMLElement>('#tutorial-caption');
+const tutorialFinger = document.querySelector<HTMLElement>('#tutorial-finger');
+const tutorialRipple = document.querySelector<HTMLElement>('#tutorial-ripple');
 const perfPanel = document.querySelector<HTMLElement>('#perf-panel');
 const perfOutput = document.querySelector<HTMLPreElement>('#perf-output');
 const levelActions = document.querySelector<HTMLSelectElement>('#level-actions');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 if (
-  !canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel || !tutorialRoot ||
+  !canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel ||
+  !tutorialPanel || !assistWelcomePanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
-  !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !perfPanel || !perfOutput ||
+  !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !tutorialFinger || !tutorialRipple ||
+  !perfPanel || !perfOutput ||
   !levelActions || !rulesContainer
 ) {
   throw new Error('Missing required UI element');
 }
 const ctx = canvas.getContext('2d');
 if (!ctx) throw new Error('2D context unavailable');
+const tutorialCtx = tutorialCanvas.getContext('2d');
+if (!tutorialCtx) throw new Error('Tutorial 2D context unavailable');
 
 const adapter = new OcamlAdapter(DEFAULT_PUZZLE_ID);
 const puzzles = adapter.listDemos();
@@ -287,16 +354,33 @@ let renderedLevelsKey = '';
 let renderedRulesKey = '';
 let layoutStopRequested = false;
 let tutorialRunning = false;
-let tutorialSteps: TutorialStep[] = [];
-let tutorialIndex = 0;
-let tutorialResizeObserver: ResizeObserver | null = null;
+let tutorialAbort: AbortController | null = null;
+let assistRunning = false;
+let assistSteps: AssistStep[] = [];
+let assistIndex = 0;
+let assistResizeObserver: ResizeObserver | null = null;
+let levelOneAssistSelection: SelectionDescriptor | null = null;
+let levelOneAssistRuleName = 'eM';
+let levelOneAssistApplied = false;
 let renderQueued = false;
 let queuedRenderRefresh = false;
 let debugCrossings: CrossingDiagnostic[] = [];
 
+// Tutorial lasso tuning: decrease this if the ghost lasso catches nearby nodes,
+// increase it if the lasso feels too tight around the highlighted rewrite.
+const TUTORIAL_LASSO_PAD = 16;
+
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const t = window.setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      window.clearTimeout(t);
+      reject(new Error('tutorial aborted'));
+    }, { once: true });
+  });
 
 const cssVar = (name: string, fallback: string) => {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -313,18 +397,34 @@ const resetShellState = () => {
   successModal.removeAttribute('data-final');
   proofPanel.removeAttribute('data-open');
   helpPanel.removeAttribute('data-open');
+  tutorialPanel.removeAttribute('data-open');
+  assistWelcomePanel.removeAttribute('data-open');
   stopTutorial();
+  stopAssist();
 };
 
 const stopTutorial = () => {
   if (!tutorialRunning) return;
   tutorialRunning = false;
+  tutorialAbort?.abort();
+  tutorialAbort = null;
+  document.body.classList.remove('tut-on');
+  tutorialPanel.removeAttribute('data-open');
+  tutorialRuleCard.classList.remove('tut-hot', 'tut-pressed');
+  document.querySelectorAll('.rule.tut-hot, .rule.tut-pressed').forEach((el) => el.classList.remove('tut-hot', 'tut-pressed'));
+  tutorialFinger.style.transform = 'translate(-120px, -120px)';
+};
+
+const stopAssist = () => {
+  if (!assistRunning) return;
+  assistRunning = false;
   tutorialRoot.setAttribute('aria-hidden', 'true');
   tutorialRoot.removeAttribute('data-active');
+  tutorialRoot.hidden = true;
   tutorialDemoLasso.classList.remove('tut-on');
   tutorialDemoLasso.removeAttribute('d');
-  tutorialResizeObserver?.disconnect();
-  tutorialResizeObserver = null;
+  assistResizeObserver?.disconnect();
+  assistResizeObserver = null;
 };
 
 const invalidateRuleDock = () => {
@@ -342,10 +442,13 @@ const loadPuzzle = (puzzleId: string) => {
   layoutStopRequested = true;
   releaseLayoutStep();
   activePuzzleId = puzzleId;
+  levelOneAssistSelection = null;
+  levelOneAssistApplied = false;
   resetShellState();
   clearSelection();
   setScene(adapter.reset(puzzleId));
   render();
+  maybeStartAssist();
 };
 
 const releaseLayoutStep = () => {};
@@ -529,19 +632,174 @@ const showProof = () => {
   proof.textContent = scene.proofText || adapter.exportProof() || 'No proof yet.';
 };
 
-const currentTutorialSteps = () =>
-  activePuzzleId === 'clean-up-two-units' || activePuzzleId === 'composite-monad-left-unit'
-    ? TUTORIAL_STEPS_BEGINNER
-    : TUTORIAL_STEPS_REFRESHER;
+const startTutorial = async () => {
+  stopAssist();
+  stopTutorial();
+  tutorialRunning = true;
+  tutorialAbort = new AbortController();
+  const signal = tutorialAbort.signal;
+  document.body.classList.add('tut-on');
+  tutorialPanel.setAttribute('data-open', 'true');
+  tutorialCaption.textContent = 'Loading a tiny proof...';
+  tutorialFinger.style.transform = 'translate(-120px, -120px)';
+  try {
+    const demo = adapter.tutorialDemo(DEFAULT_PUZZLE_ID);
+    if (!demo.ok || !demo.initialScene || !demo.selection || !demo.ruleName || !demo.result?.scene) {
+      throw new Error(demo.error || 'Tutorial data is incomplete');
+    }
+    const initialLayouts = new Map(
+      await Promise.all(demo.initialScene.graphs.map(async (graph) => [graph.id, await layoutSceneGraph(graph)] as const))
+    );
+    const resultLayouts = new Map(
+      await Promise.all(demo.result.scene.graphs.map(async (graph) => [graph.id, await layoutSceneGraph(graph)] as const))
+    );
+    const ruleNameEl = tutorialRuleCard.querySelector<HTMLElement>('.rule-name');
+    if (ruleNameEl) ruleNameEl.textContent = demo.ruleName;
+    const tutorialRule = demo.initialScene.rules.find((rule) => rule.name === demo.ruleName);
+    if (tutorialRule) {
+      const previewLayouts = {
+        lhs: await layoutSceneGraph(tutorialRule.lhs),
+        rhs: await layoutSceneGraph(tutorialRule.rhs)
+      };
+      drawRulePreviewGraphs(tutorialRulePreview, previewLayouts, false);
+    }
+    const drawTutorial = (graphs: Map<string, LayoutGraph>, selected = new Set<string>(), path: Point[] = []) => {
+      const rect = tutorialCanvas.getBoundingClientRect();
+      const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+      tutorialCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      tutorialCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      tutorialCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      tutorialCtx.clearRect(0, 0, rect.width, rect.height);
+      const panels = panelsForSize(rect.width, rect.height);
+      const lhs = graphs.get('lhs');
+      const rhs = graphs.get('rhs');
+      if (lhs) drawLayoutGraphOn(tutorialCtx, lhs, panels.lhs, demo.selection?.graphId === 'lhs' ? selected : new Set());
+      if (rhs) drawLayoutGraphOn(tutorialCtx, rhs, panels.rhs, demo.selection?.graphId === 'rhs' ? selected : new Set());
+      drawPlainEquals(tutorialCtx, rect.width * 0.5, rect.height * 0.5, 26);
+      if (path.length > 1) {
+        tutorialCtx.beginPath();
+        tutorialCtx.moveTo(path[0].x, path[0].y);
+        path.slice(1).forEach((p) => tutorialCtx.lineTo(p.x, p.y));
+        tutorialCtx.closePath();
+        tutorialCtx.fillStyle = 'rgba(41, 128, 185, 0.14)';
+        tutorialCtx.strokeStyle = '#1f6da0';
+        tutorialCtx.lineWidth = 2.4;
+        tutorialCtx.fill();
+        tutorialCtx.stroke();
+      }
+      return panels;
+    };
+    const panels = drawTutorial(initialLayouts);
+    const selectedSet = new Set(demo.selection.selectedNodeIds);
+    const tutorialGraphId = demo.selection.graphId === 'rhs' ? 'rhs' : 'lhs';
+    const selectedLayout = initialLayouts.get(tutorialGraphId);
+    if (!selectedLayout) throw new Error('Tutorial selected graph is missing');
+    const path = lassoPathForSelection(demo.selection, panels[tutorialGraphId], selectedLayout);
+    tutorialCaption.textContent = 'Circle a tangle';
+    await fingerTo(tutorialCanvasPointToPage(path[0]), 500, signal);
+    tutorialFinger.style.transition = 'none';
+    const start = performance.now();
+    while (true) {
+      if (signal.aborted) throw new Error('tutorial aborted');
+      const t = clamp((performance.now() - start) / 1400, 0, 1);
+      const partial = interpolateClosedPath(path, t);
+      const head = partial[partial.length - 1] ?? path[0];
+      const pageHead = tutorialCanvasPointToPage(head);
+      tutorialFinger.style.transform = `translate(${pageHead.x}px, ${pageHead.y}px)`;
+      drawTutorial(initialLayouts, selectedSet, partial);
+      if (t >= 1) break;
+      await frame();
+    }
+    drawTutorial(initialLayouts, selectedSet, path);
+    await sleep(450, signal);
+    tutorialCaption.textContent = 'Pick a checked move';
+    tutorialRuleCard.classList.add('tut-hot');
+    const r = tutorialRuleCard.getBoundingClientRect();
+    const p = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+    await fingerTo(p, 850, signal);
+    fireTutorialRipple(p);
+    tutorialRuleCard.classList.add('tut-pressed');
+    await sleep(180, signal);
+    tutorialRuleCard.classList.remove('tut-pressed');
+    tutorialCaption.textContent = 'Watch the real rewrite';
+    drawTutorial(resultLayouts);
+    tutorialCaption.textContent = 'Every move was checked';
+    await sleep(1800, signal);
+  } catch (error) {
+    if (!signal.aborted) {
+      const message = error instanceof Error ? error.message : String(error);
+      scene.messages = ['Tutorial could not start.', message];
+      render();
+    }
+  } finally {
+    stopTutorial();
+  }
+};
 
-const relativeRect = (rect: Rect, relative: TutorialRelativeRect): Rect => ({
+const selectLevelOneAssistTangle = () => {
+  if (activePuzzleId !== 'clean-up-two-units') return;
+  if (!levelOneAssistSelection) {
+    const demo = adapter.tutorialDemo(DEFAULT_PUZZLE_ID);
+    if (demo.ok && demo.selection && demo.ruleName) {
+      levelOneAssistSelection = {
+        ...demo.selection,
+        selectedNodeIds: [...demo.selection.selectedNodeIds],
+        polygon: [],
+        cuts: [],
+        cycleOrder: []
+      };
+      levelOneAssistRuleName = demo.ruleName;
+    }
+  }
+  if (!levelOneAssistSelection) return;
+  currentSelection = {
+    ...levelOneAssistSelection,
+    selectedNodeIds: [...levelOneAssistSelection.selectedNodeIds]
+  };
+  rules = adapter.evaluateSelection(currentSelection);
+  scene.messages = [`Selected the first matching tangle. ${levelOneAssistRuleName} is ready.`];
+  invalidateRuleDock();
+  render();
+};
+
+const applyLevelOneAssistRule = async () => {
+  if (activePuzzleId !== 'clean-up-two-units' || levelOneAssistApplied) return;
+  selectLevelOneAssistTangle();
+  if (!levelOneAssistSelection) return;
+  const selection = {
+    ...levelOneAssistSelection,
+    selectedNodeIds: [...levelOneAssistSelection.selectedNodeIds]
+  };
+  currentSelection = selection;
+  const seed = seedFromCurrentLayout(selection);
+  const collapseCenter = layoutCenterFromCurrentSelection(selection);
+  const res = perf.time('ocaml.applyRule', () => adapter.applyRule(levelOneAssistRuleName, selection));
+  if (res.ok && res.scene) {
+    levelOneAssistApplied = true;
+    bumpMoves();
+    await animateSelectionCollapse(selection);
+    clearSelection();
+    await animateRewriteScene(res.scene, selection.graphId, seed, collapseCenter, new Set(selection.selectedNodeIds));
+  } else {
+    scene.messages = [res.error || `Rule ${levelOneAssistRuleName} not applicable.`];
+    render();
+  }
+};
+
+const currentAssistSteps = () => {
+  if (activePuzzleId === 'clean-up-two-units') return ASSIST_STEPS_LEVEL_1;
+  if (activePuzzleId === 'both-sides-meet') return ASSIST_STEPS_LEVEL_3;
+  return [];
+};
+
+const relativeRect = (rect: Rect, relative: AssistRelativeRect): Rect => ({
   x: rect.x + rect.w * relative.x,
   y: rect.y + rect.h * relative.y,
   w: rect.w * relative.w,
   h: rect.h * relative.h
 });
 
-const tutorialBaseRectFor = (step: TutorialStep): Rect => {
+const assistBaseRectFor = (step: AssistStep): Rect => {
   const el = document.querySelector<HTMLElement>(step.selector);
   if (!el) return { x: 0, y: 0, w: 0, h: 0 };
   const r = el.getBoundingClientRect();
@@ -551,13 +809,13 @@ const tutorialBaseRectFor = (step: TutorialStep): Rect => {
   return rect;
 };
 
-const tutorialSpotlightRectFor = (step: TutorialStep): Rect => {
-  const rect = tutorialBaseRectFor(step);
+const assistSpotlightRectFor = (step: AssistStep): Rect => {
+  const rect = assistBaseRectFor(step);
   const pad = step.padding;
   return { x: rect.x - pad, y: rect.y - pad, w: rect.w + pad * 2, h: rect.h + pad * 2 };
 };
 
-const applyTutorialMask = (rect: Rect) => {
+const applyAssistMask = (rect: Rect) => {
   const attrs = {
     x: String(rect.x),
     y: String(rect.y),
@@ -570,14 +828,14 @@ const applyTutorialMask = (rect: Rect) => {
   });
 };
 
-const placeTutorialCard = (rect: Rect, requested: TutorialPlacement) => {
+const placeAssistCard = (rect: Rect, requested: AssistPlacement) => {
   const margin = 14;
   const cardW = tutorialCard.offsetWidth || 320;
   const cardH = tutorialCard.offsetHeight || 170;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const order: TutorialPlacement[] = [requested, 'right', 'left', 'bottom', 'top'];
-  const seen = new Set<TutorialPlacement>();
+  const order: AssistPlacement[] = [requested, 'right', 'left', 'bottom', 'top'];
+  const seen = new Set<AssistPlacement>();
   let placement = requested;
   let x = 8;
   let y = 8;
@@ -628,13 +886,13 @@ const placeTutorialCard = (rect: Rect, requested: TutorialPlacement) => {
   tutorialCard.style.top = `${y}px`;
 };
 
-const setTutorialDemo = (step: TutorialStep) => {
+const setAssistDemo = (step: AssistStep) => {
   if (step.demo !== 'lasso') {
     tutorialDemoLasso.classList.remove('tut-on');
     tutorialDemoLasso.removeAttribute('d');
     return;
   }
-  const base = tutorialBaseRectFor(step);
+  const base = assistBaseRectFor(step);
   const rect = step.lassoRect ? relativeRect(base, step.lassoRect) : base;
   const cx = rect.x + rect.w * 0.5;
   const cy = rect.y + rect.h * 0.5;
@@ -647,59 +905,88 @@ const setTutorialDemo = (step: TutorialStep) => {
     `C ${cx - rx * 1.14} ${cy + ry * 0.42}, ${cx - rx * 1.08} ${cy - ry * 0.18}, ${cx - rx} ${cy} Z`
   ].join(' ');
   tutorialDemoLasso.setAttribute('d', d);
+  tutorialDemoLasso.setAttribute('pathLength', '1');
   tutorialDemoLasso.classList.add('tut-on');
 };
 
-const paintTutorialDots = () => {
+const paintAssistDots = () => {
   tutorialDots.replaceChildren(
-    ...tutorialSteps.map((_, idx) => {
+    ...assistSteps.map((_, idx) => {
       const dot = document.createElement('div');
       dot.className = 'tut-dot';
-      dot.toggleAttribute('data-current', idx === tutorialIndex);
+      dot.toggleAttribute('data-current', idx === assistIndex);
       return dot;
     })
   );
 };
 
-const renderTutorialStep = () => {
-  const step = tutorialSteps[tutorialIndex];
+const renderAssistStep = () => {
+  const step = assistSteps[assistIndex];
   if (!step) {
-    stopTutorial();
+    stopAssist();
     return;
   }
-  const rect = tutorialSpotlightRectFor(step);
-  applyTutorialMask(rect);
-  placeTutorialCard(rect, step.placement);
-  setTutorialDemo(step);
+  const rect = assistSpotlightRectFor(step);
+  applyAssistMask(rect);
+  placeAssistCard(rect, step.placement);
+  setAssistDemo(step);
   tutorialKicker.textContent = step.kicker;
   tutorialTitle.textContent = step.title;
   tutorialBody.textContent = step.body;
-  tutorialNext.textContent = tutorialIndex === tutorialSteps.length - 1 ? 'Got it' : 'Next';
-  paintTutorialDots();
+  tutorialNext.textContent = assistIndex === assistSteps.length - 1 ? 'Got it' : 'Next';
+  paintAssistDots();
 };
 
-const nextTutorialStep = () => {
-  if (!tutorialRunning) return;
-  if (tutorialIndex >= tutorialSteps.length - 1) {
-    stopTutorial();
+const runAssistStepBefore = async (step: AssistStep) => {
+  if (step.before === 'select-level-1') selectLevelOneAssistTangle();
+  if (step.before === 'apply-level-1') await applyLevelOneAssistRule();
+};
+
+const nextAssistStep = async () => {
+  if (!assistRunning) return;
+  if (assistIndex >= assistSteps.length - 1) {
+    stopAssist();
     return;
   }
-  tutorialIndex += 1;
-  renderTutorialStep();
+  assistIndex += 1;
+  await runAssistStepBefore(assistSteps[assistIndex]);
+  renderAssistStep();
 };
 
-const startTutorial = () => {
-  stopTutorial();
-  tutorialSteps = currentTutorialSteps();
-  tutorialIndex = 0;
-  tutorialRunning = true;
+const startAssist = () => {
+  stopAssist();
+  assistSteps = currentAssistSteps();
+  if (assistSteps.length === 0) return;
+  if (tutorialRunning || proofOpen || successOpen) return;
+  assistIndex = 0;
+  assistRunning = true;
+  tutorialRoot.hidden = false;
   tutorialRoot.setAttribute('data-active', 'true');
   tutorialRoot.setAttribute('aria-hidden', 'false');
-  renderTutorialStep();
+  renderAssistStep();
   if (typeof ResizeObserver !== 'undefined') {
-    tutorialResizeObserver = new ResizeObserver(renderTutorialStep);
-    tutorialResizeObserver.observe(document.body);
+    assistResizeObserver = new ResizeObserver(renderAssistStep);
+    assistResizeObserver.observe(document.body);
   }
+};
+
+const startAssistFromWelcome = async () => {
+  assistWelcomePanel.removeAttribute('data-open');
+  startAssist();
+  if (assistRunning) await runAssistStepBefore(assistSteps[assistIndex]);
+  renderAssistStep();
+};
+
+const maybeStartAssist = () => {
+  const steps = currentAssistSteps();
+  if (steps.length === 0) return;
+  window.setTimeout(() => {
+    if (activePuzzleId === 'clean-up-two-units' && !tutorialRunning && !proofOpen && !successOpen) {
+      assistWelcomePanel.setAttribute('data-open', 'true');
+    } else {
+      startAssist();
+    }
+  }, 450);
 };
 
 (window as unknown as {
@@ -1165,6 +1452,16 @@ const drawQuestionEquals = (c: CanvasRenderingContext2D, x: number, y: number, s
   c.restore();
 };
 
+const drawPlainEquals = (c: CanvasRenderingContext2D, x: number, y: number, size = 28) => {
+  c.save();
+  c.fillStyle = '#47607a';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = `900 ${size}px "Avenir Next", sans-serif`;
+  c.fillText('=', x, y);
+  c.restore();
+};
+
 const drawLayoutGraphOn = (c: CanvasRenderingContext2D, g: LayoutGraph, panel: Rect, selected: Set<string>, view = viewForLayout(g, panel)) => {
   c.fillStyle = '#ffffff';
   c.strokeStyle = '#d4deea';
@@ -1213,6 +1510,67 @@ const drawLasso = () => {
   ctx.lineWidth = 2.4;
   ctx.fill();
   ctx.stroke();
+};
+
+const fingerTo = async (p: Point, ms = 700, signal?: AbortSignal) => {
+  tutorialFinger.style.transition = `transform ${ms}ms cubic-bezier(.45,.05,.2,1)`;
+  tutorialFinger.style.transform = `translate(${p.x}px, ${p.y}px)`;
+  await sleep(ms + 40, signal);
+};
+
+const tutorialCanvasPointToPage = (p: Point): Point => {
+  const rect = tutorialCanvas.getBoundingClientRect();
+  return { x: rect.left + p.x, y: rect.top + p.y };
+};
+
+const fireTutorialRipple = (p: Point) => {
+  tutorialRipple.style.left = `${p.x}px`;
+  tutorialRipple.style.top = `${p.y}px`;
+  tutorialRipple.classList.remove('tut-firing');
+  void tutorialRipple.offsetWidth;
+  tutorialRipple.classList.add('tut-firing');
+};
+
+const interpolateClosedPath = (points: Point[], t: number) => {
+  const segments = points.map((p, idx) => [p, points[(idx + 1) % points.length]] as const);
+  const scaled = clamp(t, 0, 1) * segments.length;
+  const whole = Math.floor(scaled);
+  const frac = scaled - whole;
+  const out: Point[] = [points[0]];
+  for (let i = 0; i < Math.min(whole, segments.length); i += 1) out.push(segments[i][1]);
+  if (whole < segments.length) {
+    const [a, b] = segments[whole];
+    out.push({ x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac });
+  }
+  return out;
+};
+
+const lassoPathForSelection = (selection: SelectionDescriptor, panel: Rect, layout: LayoutGraph) => {
+  const view = viewForLayout(layout, panel);
+  const selected = new Set(selection.selectedNodeIds);
+  const selectedNodes = layout.nodes.filter((n) => selected.has(n.id));
+  const xs: number[] = [];
+  const ys: number[] = [];
+  selectedNodes.forEach((node) => {
+    const a = toScreen({ x: node.x, y: node.y }, view);
+    const b = toScreen({ x: node.x + node.w, y: node.y + node.h }, view);
+    xs.push(a.x, b.x);
+    ys.push(a.y, b.y);
+  });
+  if (xs.length === 0) return [];
+  const pad = TUTORIAL_LASSO_PAD;
+  const x0 = Math.max(panel.x + 10, Math.min(...xs) - pad);
+  const x1 = Math.min(panel.x + panel.w - 10, Math.max(...xs) + pad);
+  const y0 = Math.max(panel.y + 10, Math.min(...ys) - pad);
+  const y1 = Math.min(panel.y + panel.h - 10, Math.max(...ys) + pad);
+  const cx = (x0 + x1) * 0.5;
+  return [
+    { x: cx, y: y0 },
+    { x: x1, y: y0 + (y1 - y0) * 0.22 },
+    { x: x1 - (x1 - x0) * 0.1, y: y1 },
+    { x: x0 + (x1 - x0) * 0.08, y: y1 - (y1 - y0) * 0.12 },
+    { x: x0, y: y0 + (y1 - y0) * 0.25 }
+  ];
 };
 
 const pointInPolygon = (p: Point, poly: Point[]) => {
@@ -1801,30 +2159,35 @@ document.addEventListener('click', (e) => {
     proofOpen = false;
     proofPanel.removeAttribute('data-open');
   } else if (action === 'help') {
-    startTutorial();
-  } else if (action === 'tutorial-next') {
-    nextTutorialStep();
-  } else if (action === 'tutorial-skip') {
+    void startTutorial();
+  } else if (action === 'close-tutorial') {
     stopTutorial();
+  } else if (action === 'assist-next') {
+    void nextAssistStep();
+  } else if (action === 'assist-skip') {
+    stopAssist();
+  } else if (action === 'assist-start') {
+    void startAssistFromWelcome();
   } else if (action === 'close-help') {
     helpPanel.removeAttribute('data-open');
   }
 });
 
 document.addEventListener('pointerdown', (e) => {
-  if (!tutorialRunning) return;
+  if (!assistRunning) return;
   const target = e.target as Element | null;
   if (target?.closest('.tut-card')) return;
   if (target?.closest('[data-action="help"]')) return;
-  nextTutorialStep();
+  void nextAssistStep();
 }, true);
 
 document.addEventListener('keydown', (e) => {
-  if (!tutorialRunning) return;
-  if (e.key === 'Escape') stopTutorial();
+  if (tutorialRunning && e.key === 'Escape') stopTutorial();
+  if (!assistRunning) return;
+  if (e.key === 'Escape') stopAssist();
   if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
-    nextTutorialStep();
+    void nextAssistStep();
   }
 }, true);
 
@@ -1840,3 +2203,4 @@ if (typeof (window as unknown as { ResizeObserver?: typeof ResizeObserver }).Res
 }
 
 void layoutScene(scene);
+maybeStartAssist();
