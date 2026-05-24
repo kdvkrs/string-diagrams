@@ -27,32 +27,38 @@ declare global {
   }
 }
 
-const DEFAULT_DEMO = 'composite-monad-left-unit';
+const DEFAULT_DEMO = 'clean-up-two-units';
 
 const fallbackPuzzles: PuzzleInfo[] = [
   {
-    id: 'composite-monad-left-unit',
+    id: 'clean-up-two-units',
     level: 'Level 1',
-    title: 'Level 1: Left Unit',
-    subtitle: 'Shrink the left unit fork until only the clean composite string remains.'
+    title: 'Level 1: Clean Up Two Units',
+    subtitle: 'A unit wire followed by multiplication disappears. I’ll do the first cleanup; you do the second.'
   },
   {
-    id: 'composite-monad-right-unit',
+    id: 'composite-monad-left-unit',
     level: 'Level 2',
-    title: 'Level 2: Right Unit',
-    subtitle: 'Shrink the right unit fork. Same proof idea, mirrored.'
+    title: 'Level 2: Composite Left Unit',
+    subtitle: 'Create an M-wire and an N-wire, cross N past M, then clean up both units.'
+  },
+  {
+    id: 'both-sides-meet',
+    level: 'Level 3',
+    title: 'Level 3: Make Both Sides Meet',
+    subtitle: 'Rewrite both diagrams toward the same middle shape, rather than pushing only one side across.'
   },
   {
     id: 'composite-monad-associativity',
-    level: 'Level 3',
-    title: 'Level 3: Double Fork',
-    subtitle: 'Lasso-select a region on either side, then tap a visual rule.'
+    level: 'Level 4',
+    title: 'Level 4: Untangle the Double Fork',
+    subtitle: 'Forks move through crossings and then reassociate: the same local moves on a larger diagram.'
   },
   {
     id: 'three-monad-composition',
-    level: 'Level 4',
-    title: 'Level 4: Three Monads',
-    subtitle: 'Compose three monads by moving the crossings into the same shape.'
+    level: 'Level 5',
+    title: 'Level 5: Three-Color Boss Level',
+    subtitle: 'Same game, larger board: three colors of wires, more crossings, same local proof idea.'
   }
 ];
 

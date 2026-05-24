@@ -15,7 +15,7 @@ type LayoutState = {
   rules: Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>;
 };
 
-const DEFAULT_PUZZLE_ID = 'composite-monad-left-unit';
+const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app root');
@@ -70,7 +70,7 @@ app.innerHTML = `
     </div>
     <div id="success-modal" role="dialog" aria-modal="true" aria-labelledby="success-title">
       <canvas id="confetti-canvas"></canvas>
-      <div class="modal">
+      <div class="modal modal--success">
         <div class="modal-check" aria-hidden="true">✓</div>
         <div class="modal-title" id="success-title">You untangled it!</div>
         <div class="modal-body">
@@ -81,6 +81,18 @@ app.innerHTML = `
           <button class="btn" data-action="play-again">Play again</button>
           <button class="btn btn--primary" data-action="see-proof">See what you did</button>
           <button class="btn btn--primary" data-action="next-level">Next level</button>
+        </div>
+      </div>
+      <div class="modal modal--end">
+        <div class="modal-check" aria-hidden="true">★</div>
+        <div class="modal-title">Demo complete</div>
+        <div class="modal-body">
+          Placeholder finale screen.<br/>
+          Same local proof idea, now on the full board.
+        </div>
+        <div class="modal-actions">
+          <button class="btn" data-action="play-again">Replay final level</button>
+          <button class="btn btn--primary" data-action="see-proof">See what you did</button>
         </div>
       </div>
     </div>
@@ -252,6 +264,7 @@ const resetShellState = () => {
   moveCountEl.textContent = '0';
   moveCounter.removeAttribute('data-shown');
   successModal.removeAttribute('data-open');
+  successModal.removeAttribute('data-final');
   proofPanel.removeAttribute('data-open');
   helpPanel.removeAttribute('data-open');
   tutorialPanel.removeAttribute('data-open');
@@ -353,11 +366,12 @@ const bumpMoves = () => {
   moveCounter.setAttribute('data-shown', 'true');
 };
 
-const fireConfetti = () => {
+const fireConfetti = (finale = false) => {
   const c = confettiCanvas.getContext('2d');
   if (!c) return;
-  const width = Math.max(window.innerWidth, document.documentElement.clientWidth || 0, 1);
-  const height = Math.max(window.innerHeight, document.documentElement.clientHeight || 0, 1);
+  const rect = successModal.getBoundingClientRect();
+  const width = Math.max(window.innerWidth, document.documentElement.clientWidth || 0, rect.width, 1);
+  const height = Math.max(window.innerHeight, document.documentElement.clientHeight || 0, rect.height, 1);
   const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
   confettiCanvas.width = Math.floor(width * dpr);
   confettiCanvas.height = Math.floor(height * dpr);
@@ -365,7 +379,7 @@ const fireConfetti = () => {
   confettiCanvas.style.height = `${height}px`;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   const colors = [cssVar('--accent', '#3b73c4'), cssVar('--node-x', '#6fa86a'), cssVar('--strand-b', '#6e3a5e'), cssVar('--strand-a', '#2f7a6e')];
-  const duration = 5200;
+  const duration = finale ? 9000 : 4200;
   const started = Date.now();
   let lastBurst = 0;
   type ConfettiBit = {
@@ -385,15 +399,15 @@ const fireConfetti = () => {
   const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
   const burst = (originX: number, originY: number, count: number) => {
     for (let i = 0; i < count; i += 1) {
-      const angle = randomInRange(-Math.PI * 0.95, -Math.PI * 0.05);
-      const speed = randomInRange(2.4, 8.6);
-      const life = randomInRange(48, 82);
+      const angle = randomInRange(-Math.PI * 0.9, -Math.PI * 0.1);
+      const speed = randomInRange(2.2, 7.8);
+      const life = randomInRange(110, 170);
       bits.push({
         x: originX,
         y: originY,
         vx: Math.cos(angle) * speed + randomInRange(-0.8, 0.8),
-        vy: Math.sin(angle) * speed - randomInRange(0.4, 2.4),
-        g: randomInRange(0.09, 0.18),
+        vy: Math.sin(angle) * speed - randomInRange(0.2, 1.8),
+        g: randomInRange(0.08, 0.14),
         r: Math.random() * Math.PI,
         vr: randomInRange(-0.32, 0.32),
         size: randomInRange(3.5, 8),
@@ -408,20 +422,26 @@ const fireConfetti = () => {
     const timeLeft = Math.max(0, duration - elapsed);
     if (elapsed - lastBurst > 220 && timeLeft > 0) {
       lastBurst = elapsed;
-      const particleCount = Math.max(6, Math.floor(28 * (timeLeft / duration)));
-      burst(width * randomInRange(0.1, 0.3), height * randomInRange(-0.08, 0.1), particleCount);
-      burst(width * randomInRange(0.7, 0.9), height * randomInRange(-0.08, 0.1), particleCount);
+      const particleCount = Math.max(finale ? 8 : 5, Math.floor((finale ? 34 : 24) * (timeLeft / duration)));
+      burst(width * randomInRange(0.08, 0.32), height * randomInRange(-0.04, 0.18), particleCount);
+      burst(width * randomInRange(0.68, 0.92), height * randomInRange(-0.04, 0.18), particleCount);
+      if (finale && elapsed < duration * 0.7) {
+        burst(width * randomInRange(0.32, 0.68), height * randomInRange(0.02, 0.28), Math.max(3, Math.floor(particleCount * 0.45)));
+      }
     }
     c.clearRect(0, 0, width, height);
     for (let i = bits.length - 1; i >= 0; i -= 1) {
       const bit = bits[i];
-      if (bit.life <= 0) return;
+      if (bit.life <= 0) {
+        bits.splice(i, 1);
+        continue;
+      }
       bit.life -= 1;
       bit.x += bit.vx;
       bit.y += bit.vy;
       bit.vy += bit.g;
       bit.r += bit.vr;
-      if (bit.life <= 0 || bit.y > height + 40) {
+      if (bit.life <= 0 || bit.y > height + 80) {
         bits.splice(i, 1);
         continue;
       }
@@ -436,7 +456,9 @@ const fireConfetti = () => {
     if (timeLeft > 0 || bits.length > 0) requestAnimationFrame(tick);
     else c.clearRect(0, 0, width, height);
   };
-  burst(width * 0.5, height * 0.28, 80);
+  burst(width * 0.5, height * 0.24, finale ? 130 : 76);
+  burst(width * 0.25, height * 0.1, finale ? 54 : 28);
+  burst(width * 0.75, height * 0.1, finale ? 54 : 28);
   tick();
 };
 
@@ -446,12 +468,13 @@ const showSuccess = () => {
   const nextButton = successModal.querySelector<HTMLButtonElement>('[data-action="next-level"]');
   const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
   const hasNext = idx >= 0 && idx < puzzles.length - 1;
+  successModal.toggleAttribute('data-final', !hasNext);
   if (nextButton) {
     nextButton.hidden = !hasNext;
     nextButton.textContent = hasNext ? `Next: ${puzzles[idx + 1].level}` : 'Next level';
   }
   successModal.setAttribute('data-open', 'true');
-  fireConfetti();
+  fireConfetti(!hasNext);
 };
 
 const showProof = () => {

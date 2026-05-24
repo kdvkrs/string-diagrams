@@ -7,7 +7,7 @@ open Gg
 let demo_state =
   "m: M⊗M -> M\nn: N⊗N -> N\nx: N⊗M -> M⊗N\nmn: M⊗N⊗M⊗N -> M⊗N := M·x·N ; m·n\nmA: m·M ; m ≡ M·m ; m\nnA: n·N ; n ≡ N·n ; n\nmx: N·m ; x ≡ x·M ; M·x ; m·N\nnx: n·M ; x ≡ N·x ; x·N ; M·n\n------\nM·x·N⊗M⊗N ; M⊗M·n·M⊗N ; m·x·N ; m·n ≡ M⊗N⊗M·x·N ; M⊗N·m·N⊗N ; M·x·n ; m·n"
 
-let mu2_state =
+let _mu2_state =
   "m: M⊗M -> M\n\
    e: 1 -> M\n\
    n: N⊗N -> N\n\
@@ -45,8 +45,40 @@ let mu3_state =
    oz: o·id ; z = id·z ; z·id ; id·o\n\
    xyz: y·id ; id·z ; x·id = id·x ; z·id ; id·y"
 
-let left_unit_state = mu2_state ^ "\n---\nef·M·N ; mn = M·N"
-let right_unit_state = mu2_state ^ "\n---\nM·N·ef ; mn = M·N"
+let clean_two_units_state =
+  "m: M⊗M -> M\n\
+   e: 1 -> M\n\
+   n: N⊗N -> N\n\
+   f: 1 -> N\n\
+   eM: e·M ; m = M\n\
+   fN: f·N ; n = N\n\
+   ------\n\
+   (e·M ; m)·(f·N ; n) = M·N"
+
+let left_unit_state =
+  "m: M⊗M -> M\n\
+   e: 1 -> M\n\
+   n: N⊗N -> N\n\
+   f: 1 -> N\n\
+   x: N⊗M -> M⊗N\n\
+   mn<color=orange> := M·x·N ; m·n\n\
+   ef<color=orange> := e·f\n\
+   fMx: f·M ; x = M·f\n\
+   eM: e·M ; m = M\n\
+   fN: f·N ; n = N\n\
+   ------\n\
+   ef·M·N ; mn = M·N"
+
+let both_sides_state =
+  "m: M⊗M -> M\n\
+   n: N⊗N -> N\n\
+   f: 1 -> N\n\
+   mA: m·M ; m = M·m ; m\n\
+   fL: f·N ; n = N\n\
+   fR: N·f ; n = N\n\
+   ------\n\
+   (m·M ; m)·(f·N ; n) = (M·m ; m)·(N·f ; n)"
+
 let three_monads_state = mu3_state ^ "\n---\nmno·id·id·id ; mno = id·id·id·mno ; mno"
 
 type puzzle = {
@@ -60,40 +92,48 @@ type puzzle = {
 
 let puzzles = [
   {
-    id = "composite-monad-left-unit";
+    id = "clean-up-two-units";
     level = "Level 1";
-    title = "Level 1: Left Unit";
-    subtitle = "Shrink the left unit fork until only the clean composite string remains.";
-    source = left_unit_state;
-    visible_rules = Some ["em"; "fn"; "fx"];
+    title = "Level 1: Clean Up Two Units";
+    subtitle = "A unit wire followed by multiplication disappears. I’ll do the first cleanup; you do the second.";
+    source = clean_two_units_state;
+    visible_rules = Some ["eM"; "fN"];
   };
   {
-    id = "composite-monad-right-unit";
+    id = "composite-monad-left-unit";
     level = "Level 2";
-    title = "Level 2: Right Unit";
-    subtitle = "Shrink the right unit fork. Same proof idea, mirrored.";
-    source = right_unit_state;
-    visible_rules = Some ["me"; "nf"; "ex"];
+    title = "Level 2: Composite Left Unit";
+    subtitle = "Create an M-wire and an N-wire, cross N past M, then clean up both units.";
+    source = left_unit_state;
+    visible_rules = Some ["fMx"; "eM"; "fN"];
+  };
+  {
+    id = "both-sides-meet";
+    level = "Level 3";
+    title = "Level 3: Make Both Sides Meet";
+    subtitle = "Rewrite both diagrams toward the same middle shape, rather than pushing only one side across.";
+    source = both_sides_state;
+    visible_rules = Some ["mA"; "fL"; "fR"];
   };
   {
     id = "composite-monad-associativity";
-    level = "Level 3";
-    title = "Level 3: Double Fork";
-    subtitle = "Lasso-select a region on either side, then tap a visual rule.";
+    level = "Level 4";
+    title = "Level 4: Untangle the Double Fork";
+    subtitle = "Forks move through crossings and then reassociate: the same local moves on a larger diagram.";
     source = demo_state;
     visible_rules = None;
   };
   {
     id = "three-monad-composition";
-    level = "Level 4";
-    title = "Level 4: Three Monads";
-    subtitle = "Compose three monads by moving the crossings into the same shape.";
+    level = "Level 5";
+    title = "Level 5: Three-Color Boss Level";
+    subtitle = "Same game, larger board: three colors of wires, more crossings, same local proof idea.";
     source = three_monads_state;
     visible_rules = None;
   };
 ]
 
-let default_puzzle_id = "composite-monad-left-unit"
+let default_puzzle_id = "clean-up-two-units"
 
 let puzzle_by_id id =
   match List.find_opt (fun p -> p.id = id) puzzles with

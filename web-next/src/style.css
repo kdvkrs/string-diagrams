@@ -569,9 +569,23 @@ body.tut-on .stage::after {
   gap: 10px;
 }
 
+.modal--end {
+  display: none;
+}
+
+#success-modal[data-final] .modal--success {
+  display: none;
+}
+
+#success-modal[data-final] .modal--end {
+  display: block;
+}
+
 #confetti-canvas {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
   z-index: 0;
   pointer-events: none;
 }
