@@ -212,64 +212,191 @@ button {
   border-radius: 999px;
 }
 
-.tut-caption {
-  position: absolute;
-  z-index: 30;
-  top: 70px;
-  left: 50%;
-  transform: translateX(-50%) translateY(-10px);
-  padding: 13px 20px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
-  box-shadow: 0 8px 32px rgba(20, 30, 45, 0.26);
-  font: 800 17px/1 var(--font);
+.tut-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.28s, transform 0.28s;
-  white-space: nowrap;
+  transition: opacity 0.24s ease;
 }
 
-.tut-finger {
+.tut-root[data-active="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tut-veil,
+.tut-demo {
   position: absolute;
-  z-index: 31;
-  left: 0;
-  top: 0;
-  width: 56px;
-  height: 56px;
-  margin-left: -18px;
-  margin-top: -10px;
-  pointer-events: none;
-  opacity: 0;
-  transform: translate(-120px, -120px);
-  transition: opacity 0.25s, transform 0.75s cubic-bezier(0.45, 0.05, 0.2, 1);
-  will-change: transform;
-}
-
-.tut-finger svg {
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 4px 10px rgba(20, 30, 45, 0.28));
 }
 
-.tut-ripple {
-  position: absolute;
-  z-index: 30;
-  left: 0;
-  top: 0;
-  width: 18px;
-  height: 18px;
-  margin-left: -9px;
-  margin-top: -9px;
-  border-radius: 50%;
-  background: rgba(59, 115, 196, 0.58);
-  opacity: 0;
+.tut-veil .veil-fill {
+  fill: rgba(20, 30, 45, 0.42);
+}
+
+.tut-veil .veil-ring {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.86);
+  stroke-width: 1.5;
+  animation: tut-spot-pulse 2.4s ease-in-out infinite;
+}
+
+.tut-demo {
   pointer-events: none;
 }
 
-.tut-ripple.tut-firing {
-  animation: tut-ripple 0.5s ease-out forwards;
+.tut-demo-lasso {
+  fill: rgba(59, 115, 196, 0.12);
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.tut-demo-lasso.tut-on {
+  animation: tut-lasso-pulse 3.2s ease-in-out infinite;
+}
+
+.tut-card {
+  position: absolute;
+  width: min(320px, calc(100vw - 24px));
+  padding: 18px 20px 16px;
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 24px 60px rgba(20, 30, 45, 0.28), 0 2px 6px rgba(20, 30, 45, 0.08);
+  transition: left 0.32s cubic-bezier(0.2, 0.7, 0.3, 1), top 0.32s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.tut-card-kicker {
+  margin-bottom: 6px;
+  color: var(--accent);
+  font: 800 10.5px/1 var(--font);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tut-card-title {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font: 800 18px/1.25 var(--font);
+}
+
+.tut-card-body {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  font: 500 14px/1.45 var(--font);
+}
+
+.tut-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tut-dots,
+.tut-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tut-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(20, 30, 45, 0.18);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.tut-dot[data-current] {
+  background: var(--accent);
+  transform: scale(1.15);
+}
+
+.tut-btn {
+  appearance: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: 800 12.5px/1 var(--font);
+  cursor: pointer;
+}
+
+.tut-btn--ghost {
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.tut-btn--ghost:hover {
+  color: var(--ink);
+}
+
+.tut-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tut-tail {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--paper-edge);
+  background: var(--card);
+  transform: rotate(45deg);
+}
+
+.tut-card[data-placement="top"] .tut-tail {
+  bottom: -9px;
+  left: 50%;
+  margin-left: -8px;
+  border-top: 0;
+  border-left: 0;
+}
+
+.tut-card[data-placement="bottom"] .tut-tail {
+  top: -9px;
+  left: 50%;
+  margin-left: -8px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.tut-card[data-placement="left"] .tut-tail {
+  right: -9px;
+  top: 50%;
+  margin-top: -8px;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.tut-card[data-placement="right"] .tut-tail {
+  left: -9px;
+  top: 50%;
+  margin-top: -8px;
+  border-top: 0;
+  border-right: 0;
+}
+
+@keyframes tut-spot-pulse {
+  0%, 100% { stroke-opacity: 0.85; }
+  50% { stroke-opacity: 0.35; }
+}
+
+@keyframes tut-lasso-pulse {
+  0% { opacity: 0; transform: scale(0.96); }
+  18% { opacity: 1; transform: scale(1); }
+  72% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.04); }
 }
 
 .perf-panel {
@@ -327,44 +454,6 @@ button {
   padding: 10px;
   font-size: 11px;
   line-height: 1.35;
-}
-
-@keyframes tut-ripple {
-  from { opacity: 0.9; transform: scale(0.4); }
-  to { opacity: 0; transform: scale(4.2); }
-}
-
-body.tut-on .tut-caption {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-body.tut-on .tut-finger {
-  opacity: 1;
-}
-
-body.tut-on .stage::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  background: rgba(20, 30, 45, 0.08);
-  box-shadow: inset 0 0 0 9999px rgba(255, 255, 255, 0.02);
-}
-
-.rule.tut-hot {
-  border-color: var(--accent);
-  background: var(--hot-bg);
-  box-shadow: 0 4px 18px rgba(59, 115, 196, 0.2);
-}
-
-.rule.tut-hot .rule-badge {
-  background: var(--accent);
-}
-
-.rule.tut-pressed {
-  transform: translateY(2px) scale(0.985);
 }
 
 .dock {
@@ -500,8 +589,7 @@ body.tut-on .stage::after {
 
 #success-modal,
 #proof-panel,
-#help-panel,
-#tutorial-panel {
+#help-panel {
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -514,15 +602,13 @@ body.tut-on .stage::after {
 
 #success-modal[data-open="true"],
 #proof-panel[data-open="true"],
-#help-panel[data-open="true"],
-#tutorial-panel[data-open="true"] {
+#help-panel[data-open="true"] {
   display: grid;
 }
 
 .modal,
 .proof-card,
-.help-card,
-.tutorial-card {
+.help-card {
   position: relative;
   z-index: 1;
   width: min(480px, calc(100vw - 40px));
@@ -601,49 +687,6 @@ body.tut-on .stage::after {
   width: min(520px, calc(100vw - 40px));
   padding: 24px;
   text-align: left;
-}
-
-.tutorial-card {
-  width: min(920px, calc(100vw - 36px));
-  padding: 22px;
-  text-align: left;
-}
-
-.tutorial-copy {
-  margin: -4px 0 14px;
-  color: var(--ink-soft);
-  font: 600 14px/1.45 var(--font);
-}
-
-.tutorial-stage-wrap {
-  height: min(430px, 52vh);
-  min-height: 300px;
-  border: 1px solid var(--paper-edge);
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--paper);
-}
-
-#tutorial-stage {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.tutorial-rule {
-  width: min(300px, 100%);
-  margin: 14px auto 0;
-  min-height: 120px;
-}
-
-.tutorial-rule-preview {
-  display: block;
-  width: 100%;
-  height: 96px;
-  margin-top: 16px;
-  border: 1px solid var(--paper-edge);
-  border-radius: 8px;
-  background: var(--paper);
 }
 
 .help-card p {
