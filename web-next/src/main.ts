@@ -182,12 +182,17 @@ app.innerHTML = `
       <div class="proof-card">
         <div class="proof-head">
           <div>
-            <div class="proof-kicker">Checked artifact</div>
-            <h2>Proof script</h2>
+            <div class="proof-kicker">Rocq proof script</div>
+            <h2 id="proof-title">Your proof</h2>
           </div>
-          <button class="btn" data-action="close-proof">Close</button>
         </div>
-        <pre id="proof"></pre>
+        <p class="proof-explainer">Every transformation you made can be expressed as a step in the Rocq theorem prover.</p>
+        <pre id="proof" class="rocq-proof"></pre>
+        <div class="proof-share-status" id="proof-share-status" aria-live="polite"></div>
+        <div class="proof-actions">
+          <button class="btn" id="proof-share-action" data-action="share-proof">Share proof</button>
+          <button class="btn btn--primary" id="proof-primary-action" data-action="next-level">Next level</button>
+        </div>
       </div>
     </div>
     <div id="help-panel">
@@ -309,6 +314,10 @@ app.innerHTML = `
 const canvas = document.querySelector<HTMLCanvasElement>('#stage');
 const subtitle = document.querySelector<HTMLElement>('#subtitle-text');
 const proof = document.querySelector<HTMLPreElement>('#proof');
+const proofTitle = document.querySelector<HTMLElement>('#proof-title');
+const proofShareStatus = document.querySelector<HTMLElement>('#proof-share-status');
+const proofShareAction = document.querySelector<HTMLButtonElement>('#proof-share-action');
+const proofPrimaryAction = document.querySelector<HTMLButtonElement>('#proof-primary-action');
 const moveCountEl = document.querySelector<HTMLElement>('#move-count');
 const moveCounter = document.querySelector<HTMLElement>('[data-move-counter]');
 const successModal = document.querySelector<HTMLElement>('#success-modal');
@@ -342,7 +351,7 @@ const levelActions = document.querySelector<HTMLSelectElement>('#level-actions')
 const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 if (
-  !canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel ||
+  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel ||
   !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
@@ -679,6 +688,78 @@ const fireConfetti = (finale = false) => {
   tick();
 };
 
+const displayPuzzleTitle = (puzzle: PuzzleInfo) => puzzle.title.replace(new RegExp(`^${puzzle.level}:\\s*`), '');
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const highlightRocqLine = (line: string) => {
+  if (/^\s*\(\*/.test(line)) return `<span class="rocq-comment">${escapeHtml(line)}</span>`;
+  let out = escapeHtml(line);
+  out = out.replace(/\b(Goal|Proof|Qed|transitivity|rewrite|reflexivity|mcat)\b/g, '<span class="rocq-keyword">$1</span>');
+  out = out.replace(/\b(R\d+)\b/g, '<span class="rocq-rule">$1</span>');
+  return out;
+};
+
+const highlightRocq = (script: string) => script.split('\n').map(highlightRocqLine).join('\n');
+
+const currentProofText = () => scene.proofText || adapter.exportProof() || 'No proof yet.';
+
+const proofFileName = () => {
+  const puzzle = puzzles.find((p) => p.id === activePuzzleId);
+  const label = puzzle ? `${puzzle.level} ${displayPuzzleTitle(puzzle)}` : scene.title || 'string diagram proof';
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'string-diagram-proof';
+  return `${slug}.v`;
+};
+
+const setProofShareStatus = (message: string) => {
+  proofShareStatus.textContent = message;
+  proofShareStatus.toggleAttribute('data-show', message.length > 0);
+};
+
+const shareProof = async () => {
+  const proofText = currentProofText();
+  const title = proofTitle.textContent || 'Rocq proof';
+  const file = new File([proofText], proofFileName(), { type: 'text/plain' });
+  const nav = navigator as Navigator & {
+    canShare?: (data: ShareData & { files?: File[] }) => boolean;
+    share?: (data: ShareData & { files?: File[] }) => Promise<void>;
+  };
+
+  try {
+    if (nav.share && nav.canShare?.({ files: [file] })) {
+      await nav.share({ title, text: 'Machine-checked string diagram proof', files: [file] });
+      setProofShareStatus('Opened the share sheet.');
+      return;
+    }
+    if (nav.share) {
+      await nav.share({ title, text: proofText });
+      setProofShareStatus('Opened the share sheet.');
+      return;
+    }
+  } catch (error) {
+    const name = error instanceof DOMException ? error.name : '';
+    if (name === 'AbortError') {
+      setProofShareStatus('');
+      return;
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(proofText);
+    setProofShareStatus('Copied proof to clipboard.');
+  } catch {
+    setProofShareStatus('Sharing is unavailable here. Select the proof text to copy it.');
+  }
+};
+
 const showSuccess = () => {
   if (successOpen) return;
   successOpen = true;
@@ -698,7 +779,14 @@ const showProof = () => {
   proofOpen = true;
   successModal.removeAttribute('data-open');
   proofPanel.setAttribute('data-open', 'true');
-  proof.textContent = scene.proofText || adapter.exportProof() || 'No proof yet.';
+  const puzzle = puzzles.find((p) => p.id === activePuzzleId);
+  const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
+  const hasNext = idx >= 0 && idx < puzzles.length - 1;
+  proofTitle.textContent = `Your proof for ${puzzle ? displayPuzzleTitle(puzzle) : scene.title}`;
+  proofPrimaryAction.textContent = hasNext ? 'Next level' : 'Close';
+  proofPrimaryAction.dataset.action = hasNext ? 'next-level' : 'close-proof';
+  proof.innerHTML = highlightRocq(currentProofText());
+  setProofShareStatus('');
 };
 
 const startTutorial = async () => {
@@ -2057,7 +2145,7 @@ const refreshUi = () => {
   subtitle.textContent = hasSelection && hasEnabledRule
     ? `${currentSelection.selectedNodeIds.length} piece(s) selected. Pick a lit-up move.`
     : lastMessage;
-  if (proofOpen) proof.textContent = scene.proofText || adapter.exportProof() || 'No proof yet.';
+  if (proofOpen) proof.innerHTML = highlightRocq(currentProofText());
   renderLevelButtons();
   rulesContainer.dataset.selection = String(hasSelection);
   const ruleKey = [
@@ -2356,6 +2444,8 @@ document.addEventListener('click', (e) => {
     applyRuleFromButton(actionEl);
   } else if (action === 'see-proof') {
     showProof();
+  } else if (action === 'share-proof') {
+    void shareProof();
   } else if (action === 'close-proof') {
     proofOpen = false;
     proofPanel.removeAttribute('data-open');
