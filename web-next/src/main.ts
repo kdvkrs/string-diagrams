@@ -273,6 +273,7 @@ app.innerHTML = `
     </div>
   </div>
   <div class="tut-caption" id="tutorial-caption" aria-hidden="true">Circle a real rewrite</div>
+  <div class="selection-feedback" id="selection-feedback" aria-live="polite"></div>
   <div class="tut-finger" id="tutorial-finger" aria-hidden="true">
     <svg viewBox="0 0 56 64">
       <ellipse cx="28" cy="28" rx="16" ry="20" fill="rgba(255,255,255,.88)" stroke="rgba(20,30,45,.55)" stroke-width="1.4"/>
@@ -293,7 +294,10 @@ app.innerHTML = `
   </div>
   <footer class="dock">
     <div class="dock-label">Moves</div>
-    <div class="rules" id="rules"></div>
+    <div class="rules-shell" id="rules-shell">
+      <div class="rules" id="rules"></div>
+      <div class="rules-scroll-cue" aria-hidden="true">slide for more moves</div>
+    </div>
     <div class="move-counter" data-move-counter>
       <b id="move-count">0</b> moves<br/>
       <span>so far</span>
@@ -329,19 +333,21 @@ const tutorialDots = document.querySelector<HTMLElement>('#tutorial-dots');
 const tutorialNext = document.querySelector<HTMLButtonElement>('#tutorial-next');
 const confettiCanvas = document.querySelector<HTMLCanvasElement>('#confetti-canvas');
 const tutorialCaption = document.querySelector<HTMLElement>('#tutorial-caption');
+const selectionFeedback = document.querySelector<HTMLElement>('#selection-feedback');
 const tutorialFinger = document.querySelector<HTMLElement>('#tutorial-finger');
 const tutorialRipple = document.querySelector<HTMLElement>('#tutorial-ripple');
 const perfPanel = document.querySelector<HTMLElement>('#perf-panel');
 const perfOutput = document.querySelector<HTMLPreElement>('#perf-output');
 const levelActions = document.querySelector<HTMLSelectElement>('#level-actions');
+const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 if (
   !canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel ||
   !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
-  !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !tutorialFinger || !tutorialRipple ||
+  !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
   !perfPanel || !perfOutput ||
-  !levelActions || !rulesContainer
+  !levelActions || !rulesShell || !rulesContainer
 ) {
   throw new Error('Missing required UI element');
 }
@@ -386,6 +392,7 @@ let assistIndex = 0;
 let assistResizeObserver: ResizeObserver | null = null;
 let assistFingerFrame = 0;
 let assistFingerStartedAt = 0;
+let selectionFeedbackTimer = 0;
 let levelOneAssistSelection: SelectionDescriptor | null = null;
 let levelOneAssistRuleName = 'eM';
 let levelOneAssistApplied = false;
@@ -442,6 +449,20 @@ const stopTutorial = () => {
   tutorialRuleCard.classList.remove('tut-hot', 'tut-pressed');
   document.querySelectorAll('.rule.tut-hot, .rule.tut-pressed').forEach((el) => el.classList.remove('tut-hot', 'tut-pressed'));
   tutorialFinger.style.transform = 'translate(-120px, -120px)';
+};
+
+const hideSelectionFeedback = () => {
+  if (selectionFeedbackTimer) window.clearTimeout(selectionFeedbackTimer);
+  selectionFeedbackTimer = 0;
+  selectionFeedback.removeAttribute('data-show');
+};
+
+const showSelectionFeedback = (message: string) => {
+  if (tutorialRunning || assistRunning) return;
+  if (selectionFeedbackTimer) window.clearTimeout(selectionFeedbackTimer);
+  selectionFeedback.textContent = message;
+  selectionFeedback.setAttribute('data-show', 'true');
+  selectionFeedbackTimer = window.setTimeout(hideSelectionFeedback, 2600);
 };
 
 const stopAssistFinger = () => {
@@ -1810,8 +1831,10 @@ const evaluateSelection = (panels: PanelMap) => {
   if (!rules.some((r) => r.enabled)) {
     const why = rules.map((r) => `${r.name}: ${r.reason ?? 'not applicable'}`).join(' | ');
     scene.messages = [`No rule matches this ${graphId} selection (${selected.length} nodes).`, why];
+    showSelectionFeedback('No rules match your selection. Try circling another tangle.');
   } else {
     scene.messages = [`Selection on ${graphId}: ${selected.length} node(s). Applicable rules highlighted.`];
+    hideSelectionFeedback();
   }
 };
 
@@ -2016,6 +2039,17 @@ const renderLevelButtons = () => {
   levelActions.value = activePuzzleId;
 };
 
+const updateRuleScrollState = () => {
+  const overflow = rulesContainer.scrollWidth > rulesContainer.clientWidth + 2;
+  const maxScroll = Math.max(0, rulesContainer.scrollWidth - rulesContainer.clientWidth);
+  const atStart = rulesContainer.scrollLeft <= 2;
+  const atEnd = rulesContainer.scrollLeft >= maxScroll - 2;
+  rulesShell.dataset.overflow = String(overflow);
+  rulesShell.dataset.atStart = String(!overflow || atStart);
+  rulesShell.dataset.atEnd = String(!overflow || atEnd);
+  if (!overflow) rulesShell.removeAttribute('data-scrolled');
+};
+
 const refreshUi = () => {
   const lastMessage = scene.messages[0] || scene.subtitle || 'Lasso a tangle, then pick a move';
   const hasSelection = currentSelection.selectedNodeIds.length > 0;
@@ -2032,8 +2066,12 @@ const refreshUi = () => {
     scene.rules.map((r) => r.name).join(','),
     rules.map((r) => `${r.name}:${r.enabled ? 1 : 0}:${r.reason ?? ''}`).join(',')
   ].join('|');
-  if (ruleKey === renderedRulesKey) return;
+  if (ruleKey === renderedRulesKey) {
+    requestAnimationFrame(updateRuleScrollState);
+    return;
+  }
   renderedRulesKey = ruleKey;
+  if (!hasSelection) rulesShell.removeAttribute('data-scrolled');
   rulesContainer.replaceChildren(
     ...scene.rules.map((rule, idx) => {
       const name = rule.name;
@@ -2059,6 +2097,7 @@ const refreshUi = () => {
       return btn;
     })
   );
+  requestAnimationFrame(updateRuleScrollState);
 };
 
 const panelsForSize = (cssW: number, cssH: number): PanelMap => {
@@ -2153,6 +2192,7 @@ const canvasPoint = (clientX: number, clientY: number): Point => {
 
 const startDrag = (p: Point) => {
   dragging = true;
+  hideSelectionFeedback();
   lasso = [p];
   render(false);
 };
@@ -2192,6 +2232,7 @@ const clearSelection = () => {
   lasso = [];
   currentSelection = emptySelection();
   rules = disabledRulesFor(scene, 'Select a sub-diagram');
+  hideSelectionFeedback();
 };
 
 const applyRuleFromButton = async (btn: HTMLButtonElement) => {
@@ -2360,6 +2401,17 @@ document.addEventListener('keydown', (e) => {
 levelActions.addEventListener('change', () => {
   loadPuzzle(levelActions.value || DEFAULT_PUZZLE_ID);
 });
+
+rulesContainer.addEventListener(
+  'scroll',
+  () => {
+    if (rulesContainer.scrollLeft > 8) rulesShell.dataset.scrolled = 'true';
+    updateRuleScrollState();
+  },
+  { passive: true }
+);
+
+window.addEventListener('resize', () => requestAnimationFrame(updateRuleScrollState));
 
 if (typeof (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver !== 'undefined') {
   const ro = new ResizeObserver(() => requestRender('resize', false));

@@ -230,6 +230,30 @@ button {
   white-space: nowrap;
 }
 
+.selection-feedback {
+  position: absolute;
+  z-index: 30;
+  top: 78px;
+  left: 50%;
+  max-width: min(520px, calc(100vw - 36px));
+  transform: translateX(-50%) translateY(-10px);
+  padding: 13px 18px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 8px 32px rgba(20, 30, 45, 0.26);
+  font: 800 15px/1.2 var(--font);
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s, transform 0.24s;
+}
+
+.selection-feedback[data-show="true"] {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .tut-finger {
   position: absolute;
   z-index: 31;
@@ -503,6 +527,20 @@ button {
   }
 }
 
+@keyframes rules-cue-slide {
+  0%, 100% {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  18%, 72% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    transform: translateX(-18px);
+  }
+}
+
 body.tut-on .tut-caption {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
@@ -619,11 +657,70 @@ body.tut-on .stage::after {
   text-transform: uppercase;
 }
 
-.rules {
-  display: flex;
-  gap: 10px;
+.rules-shell {
+  position: relative;
   flex: 1;
   min-width: 0;
+  --rule-card-height: 138px;
+}
+
+.rules-shell::before,
+.rules-shell::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 2px;
+  width: 42px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.rules-shell::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--dock) 8%, rgba(238, 243, 248, 0));
+}
+
+.rules-shell::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--dock) 8%, rgba(238, 243, 248, 0));
+}
+
+.rules-shell[data-overflow="true"][data-at-start="false"]::before,
+.rules-shell[data-overflow="true"][data-at-end="false"]::after {
+  opacity: 1;
+}
+
+.rules-scroll-cue {
+  position: absolute;
+  z-index: 4;
+  right: 16px;
+  bottom: 10px;
+  padding: 6px 9px;
+  border: 1px solid rgba(59, 115, 196, 0.24);
+  border-radius: 999px;
+  background: rgba(251, 253, 255, 0.92);
+  color: var(--accent);
+  box-shadow: 0 8px 24px rgba(20, 30, 45, 0.12);
+  font: 800 10px/1 var(--font);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(6px);
+}
+
+.rules-shell[data-overflow="true"][data-at-start="true"]:not([data-scrolled="true"]) .rules-scroll-cue {
+  animation: rules-cue-slide 2.6s ease-in-out 0.5s 3;
+}
+
+.rules {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--rule-card-height);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   padding-bottom: 2px;
@@ -636,6 +733,7 @@ body.tut-on .stage::after {
   display: flex;
   flex-direction: column;
   flex: 0 0 220px;
+  height: var(--rule-card-height);
   min-width: 0;
   padding: 8px;
   border: 1px solid var(--paper-edge);
@@ -662,7 +760,40 @@ body.tut-on .stage::after {
 }
 
 .rules[data-selection="true"] .rule[data-dimmed="true"] {
-  opacity: 0.38;
+  flex-basis: 68px;
+  height: var(--rule-card-height);
+  justify-content: flex-start;
+  padding: 10px 8px;
+  opacity: 0.58;
+  background: rgba(251, 253, 255, 0.76);
+}
+
+.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-meta {
+  position: static;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 100%;
+  justify-content: flex-start;
+}
+
+.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-badge {
+  background: rgba(38, 58, 80, 0.72);
+}
+
+.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
+
+.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-preview {
+  display: none;
 }
 
 .rule-meta {
@@ -978,6 +1109,10 @@ pre {
 
   .rules {
     gap: 8px;
+  }
+
+  .rules-shell {
+    --rule-card-height: 130px;
   }
 
   .rule {
