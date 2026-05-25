@@ -89,6 +89,17 @@ const ASSIST_STEPS_LEVEL_3: AssistStep[] = [
   }
 ];
 
+const ASSIST_STEPS_LEVEL_5: AssistStep[] = [
+  {
+    selector: '#rules',
+    padding: 8,
+    kicker: 'Hint',
+    title: 'More moves are available',
+    body: 'The rule row scrolls sideways. In this level, slide the moves at the bottom to find the rule you need.',
+    placement: 'top'
+  }
+];
+
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app root');
 
@@ -836,6 +847,7 @@ const applyLevelOneAssistRule = async () => {
 const currentAssistSteps = () => {
   if (activePuzzleId === 'clean-up-two-units') return ASSIST_STEPS_LEVEL_1;
   if (activePuzzleId === 'both-sides-meet') return ASSIST_STEPS_LEVEL_3;
+  if (activePuzzleId === 'three-monad-composition') return ASSIST_STEPS_LEVEL_5;
   return [];
 };
 
