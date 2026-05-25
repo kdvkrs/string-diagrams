@@ -325,7 +325,7 @@ button {
 }
 
 .tut-demo-lasso.tut-on {
-  animation: tut-lasso-draw 3.2s ease-in-out infinite;
+  animation: tut-lasso-draw 4.8s ease-in-out infinite;
 }
 
 .tut-card {
@@ -491,6 +491,18 @@ button {
   to { opacity: 0; transform: scale(4.2); }
 }
 
+@keyframes assist-rule-flash {
+  0%, 100% {
+    background: var(--hot-bg);
+    box-shadow: 0 4px 18px rgba(59, 115, 196, 0.2);
+  }
+  50% {
+    background: #d9ecff;
+    border-color: #3b91dd;
+    box-shadow: 0 0 0 4px rgba(86, 169, 242, 0.24), 0 10px 30px rgba(59, 145, 221, 0.32);
+  }
+}
+
 body.tut-on .tut-caption {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
@@ -498,6 +510,10 @@ body.tut-on .tut-caption {
 
 body.tut-on .tut-finger {
   opacity: 1;
+}
+
+body.assist-on .tut-finger.assist-finger {
+  transition: none;
 }
 
 body.tut-on .stage::after {
@@ -514,6 +530,10 @@ body.tut-on .stage::after {
   border-color: var(--accent);
   background: var(--hot-bg);
   box-shadow: 0 4px 18px rgba(59, 115, 196, 0.2);
+}
+
+.rule.assist-rule-pulse {
+  animation: assist-rule-flash 1.05s ease-in-out infinite;
 }
 
 .rule.tut-hot .rule-badge {
@@ -712,11 +732,30 @@ body.tut-on .stage::after {
   opacity: 0.6;
 }
 
+.reset-demo-trigger {
+  appearance: none;
+  align-self: flex-end;
+  margin-left: -6px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: rgba(71, 96, 122, 0.48);
+  font: 800 10px/1 var(--font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.reset-demo-trigger:hover {
+  color: var(--accent);
+}
+
 #success-modal,
 #proof-panel,
 #help-panel,
 #tutorial-panel,
-#assist-welcome-panel {
+#assist-welcome-panel,
+#reset-demo-panel {
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -731,7 +770,8 @@ body.tut-on .stage::after {
 #proof-panel[data-open="true"],
 #help-panel[data-open="true"],
 #tutorial-panel[data-open="true"],
-#assist-welcome-panel[data-open="true"] {
+#assist-welcome-panel[data-open="true"],
+#reset-demo-panel[data-open="true"] {
   display: grid;
 }
 
@@ -778,6 +818,27 @@ body.tut-on .stage::after {
   margin: 10px 0 22px;
   color: var(--ink-soft);
   font: 400 14.5px/1.5 var(--font);
+}
+
+.assist-welcome-card {
+  box-sizing: border-box;
+  width: min(900px, calc(100vw - 40px));
+  min-width: min(50vw, calc(100vw - 40px));
+  padding: 38px 44px 34px;
+}
+
+.assist-welcome-image {
+  display: block;
+  width: min(720px, 100%);
+  max-width: 100%;
+  max-height: min(520px, 54vh);
+  object-fit: contain;
+  margin: 2px auto 26px;
+  border-radius: var(--radius);
+}
+
+.reset-demo-card {
+  width: min(460px, calc(100vw - 40px));
 }
 
 .modal-actions {

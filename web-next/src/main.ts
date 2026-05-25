@@ -18,6 +18,7 @@ type AssistStep = {
   padding: number;
   focusRect?: AssistFocusRect;
   lassoRect?: AssistRelativeRect;
+  selectionDemo?: 'level-1-em';
   before?: 'select-level-1' | 'apply-level-1';
   kicker: string;
   title: string;
@@ -44,6 +45,7 @@ const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
     title: 'Circle a tangle',
     body: 'Drag your finger around a small piece of the diagram on the left to select it.',
     placement: 'right',
+    selectionDemo: 'level-1-em',
     demo: 'lasso'
   },
   {
@@ -155,10 +157,9 @@ app.innerHTML = `
       </div>
       <div class="modal modal--end">
         <div class="modal-check" aria-hidden="true">★</div>
-        <div class="modal-title">Demo complete</div>
+        <div class="modal-title">Congratulations!</div>
         <div class="modal-body">
-          Placeholder finale screen.<br/>
-          Same local proof idea, now on the full board.
+          You untangled all diagrams and wrote five machine-checked proofs.
         </div>
         <div class="modal-actions">
           <button class="btn" data-action="play-again">Replay final level</button>
@@ -215,8 +216,19 @@ app.innerHTML = `
       <div class="assist-welcome-card">
         <div class="modal-title">Can you untangle the proof?</div>
         <div class="modal-body">Your goal in this puzzle is to get both diagrams to match.</div>
+        <img class="assist-welcome-image" src="./sd_upscaled.png" alt="" aria-hidden="true"/>
         <div class="modal-actions">
           <button class="btn btn--primary" data-action="assist-start">Start demo</button>
+        </div>
+      </div>
+    </div>
+    <div id="reset-demo-panel" role="dialog" aria-modal="true" aria-labelledby="reset-demo-title">
+      <div class="modal reset-demo-card">
+        <div class="modal-title" id="reset-demo-title">Are you sure you want to start over?</div>
+        <div class="modal-body">This will reset the demo to Level 1 and clear the current proof run.</div>
+        <div class="modal-actions">
+          <button class="btn" data-action="cancel-reset-demo">Cancel</button>
+          <button class="btn btn--primary" data-action="confirm-reset-demo">Start over</button>
         </div>
       </div>
     </div>
@@ -275,6 +287,7 @@ app.innerHTML = `
       <b id="move-count">0</b> moves<br/>
       <span>so far</span>
     </div>
+    <button class="reset-demo-trigger" data-action="reset-demo" type="button">Reset demo</button>
   </footer>
 `;
 
@@ -288,6 +301,7 @@ const proofPanel = document.querySelector<HTMLElement>('#proof-panel');
 const helpPanel = document.querySelector<HTMLElement>('#help-panel');
 const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
 const assistWelcomePanel = document.querySelector<HTMLElement>('#assist-welcome-panel');
+const resetDemoPanel = document.querySelector<HTMLElement>('#reset-demo-panel');
 const tutorialCanvas = document.querySelector<HTMLCanvasElement>('#tutorial-stage');
 const tutorialRuleCard = document.querySelector<HTMLButtonElement>('#tutorial-rule-card');
 const tutorialRulePreview = document.querySelector<HTMLElement>('#tutorial-rule-preview');
@@ -312,7 +326,7 @@ const levelActions = document.querySelector<HTMLSelectElement>('#level-actions')
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 if (
   !canvas || !subtitle || !proof || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel ||
-  !tutorialPanel || !assistWelcomePanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
+  !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !tutorialFinger || !tutorialRipple ||
   !perfPanel || !perfOutput ||
@@ -359,6 +373,8 @@ let assistRunning = false;
 let assistSteps: AssistStep[] = [];
 let assistIndex = 0;
 let assistResizeObserver: ResizeObserver | null = null;
+let assistFingerFrame = 0;
+let assistFingerStartedAt = 0;
 let levelOneAssistSelection: SelectionDescriptor | null = null;
 let levelOneAssistRuleName = 'eM';
 let levelOneAssistApplied = false;
@@ -369,6 +385,7 @@ let debugCrossings: CrossingDiagnostic[] = [];
 // Tutorial lasso tuning: decrease this if the ghost lasso catches nearby nodes,
 // increase it if the lasso feels too tight around the highlighted rewrite.
 const TUTORIAL_LASSO_PAD = 16;
+const ASSIST_LASSO_DURATION_MS = 4800;
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
@@ -399,6 +416,7 @@ const resetShellState = () => {
   helpPanel.removeAttribute('data-open');
   tutorialPanel.removeAttribute('data-open');
   assistWelcomePanel.removeAttribute('data-open');
+  resetDemoPanel.removeAttribute('data-open');
   stopTutorial();
   stopAssist();
 };
@@ -415,14 +433,28 @@ const stopTutorial = () => {
   tutorialFinger.style.transform = 'translate(-120px, -120px)';
 };
 
+const stopAssistFinger = () => {
+  if (assistFingerFrame) cancelAnimationFrame(assistFingerFrame);
+  assistFingerFrame = 0;
+  assistFingerStartedAt = 0;
+  tutorialFinger.classList.remove('assist-finger');
+  tutorialFinger.style.opacity = '';
+  tutorialFinger.style.transform = 'translate(-120px, -120px)';
+};
+
 const stopAssist = () => {
   if (!assistRunning) return;
   assistRunning = false;
+  document.body.classList.remove('assist-on');
   tutorialRoot.setAttribute('aria-hidden', 'true');
   tutorialRoot.removeAttribute('data-active');
   tutorialRoot.hidden = true;
   tutorialDemoLasso.classList.remove('tut-on');
   tutorialDemoLasso.removeAttribute('d');
+  stopAssistFinger();
+  document
+    .querySelectorAll('.rule.assist-rule-pulse, .rule.tut-hot')
+    .forEach((el) => el.classList.remove('assist-rule-pulse', 'tut-hot'));
   assistResizeObserver?.disconnect();
   assistResizeObserver = null;
 };
@@ -449,6 +481,11 @@ const loadPuzzle = (puzzleId: string) => {
   setScene(adapter.reset(puzzleId));
   render();
   maybeStartAssist();
+};
+
+const resetDemo = () => {
+  resetDemoPanel.removeAttribute('data-open');
+  loadPuzzle(DEFAULT_PUZZLE_ID);
 };
 
 const releaseLayoutStep = () => {};
@@ -736,7 +773,7 @@ const startTutorial = async () => {
   }
 };
 
-const selectLevelOneAssistTangle = () => {
+const ensureLevelOneAssistSelection = () => {
   if (activePuzzleId !== 'clean-up-two-units') return;
   if (!levelOneAssistSelection) {
     const demo = adapter.tutorialDemo(DEFAULT_PUZZLE_ID);
@@ -751,6 +788,10 @@ const selectLevelOneAssistTangle = () => {
       levelOneAssistRuleName = demo.ruleName;
     }
   }
+};
+
+const selectLevelOneAssistTangle = () => {
+  ensureLevelOneAssistSelection();
   if (!levelOneAssistSelection) return;
   currentSelection = {
     ...levelOneAssistSelection,
@@ -760,6 +801,12 @@ const selectLevelOneAssistTangle = () => {
   scene.messages = [`Selected the first matching tangle. ${levelOneAssistRuleName} is ready.`];
   invalidateRuleDock();
   render();
+};
+
+const getLevelOneAssistSelection = () => {
+  if (activePuzzleId !== 'clean-up-two-units') return null;
+  ensureLevelOneAssistSelection();
+  return levelOneAssistSelection;
 };
 
 const applyLevelOneAssistRule = async () => {
@@ -886,27 +933,126 @@ const placeAssistCard = (rect: Rect, requested: AssistPlacement) => {
   tutorialCard.style.top = `${y}px`;
 };
 
+const graphPanelForPageRect = (graphId: 'lhs' | 'rhs') => {
+  const canvasRect = canvas.getBoundingClientRect();
+  const panels = panelsForSize(canvasRect.width, canvasRect.height);
+  const panel = panels[graphId];
+  return {
+    canvasRect,
+    panel,
+    pagePanel: { x: canvasRect.left + panel.x, y: canvasRect.top + panel.y, w: panel.w, h: panel.h }
+  };
+};
+
+const assistEllipseForSelection = (selection: SelectionDescriptor): Rect | null => {
+  const graphId = selection.graphId === 'rhs' ? 'rhs' : 'lhs';
+  const graph = layouts?.graphs.get(graphId);
+  if (!graph) return null;
+  const selected = new Set(selection.selectedNodeIds);
+  const nodes = graph.nodes.filter((node) => selected.has(node.id) && !node.boundary);
+  if (nodes.length === 0) return null;
+  const { canvasRect, panel } = graphPanelForPageRect(graphId);
+  const panels = panelsForSize(canvasRect.width, canvasRect.height);
+  const lhs = layouts?.graphs.get('lhs');
+  const rhs = layouts?.graphs.get('rhs');
+  const sharedScale = lhs && rhs ? sharedViewScale([lhs, rhs], panels.lhs) : undefined;
+  const view = sharedScale ? viewForLayoutScale(graph, panel, sharedScale) : viewForLayout(graph, panel);
+  // Match the canvas renderer: convert the selected node bounds from layout
+  // space through the current graph view, then into page coordinates.
+  const xs: number[] = [];
+  const ys: number[] = [];
+  nodes.forEach((node) => {
+    const a = toScreen({ x: node.x, y: node.y }, view);
+    const b = toScreen({ x: node.x + node.w, y: node.y + node.h }, view);
+    xs.push(canvasRect.left + a.x, canvasRect.left + b.x);
+    ys.push(canvasRect.top + a.y, canvasRect.top + b.y);
+  });
+  const pad = TUTORIAL_LASSO_PAD + 6;
+  const x0 = Math.min(...xs) - pad;
+  const x1 = Math.max(...xs) + pad;
+  const y0 = Math.min(...ys) - pad;
+  const y1 = Math.max(...ys) + pad;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+};
+
+const assistDemoRectFor = (step: AssistStep) => {
+  if (step.selectionDemo === 'level-1-em') {
+    const selection = getLevelOneAssistSelection();
+    const rect = selection ? assistEllipseForSelection(selection) : null;
+    if (rect) return rect;
+  }
+  const base = assistBaseRectFor(step);
+  return step.lassoRect ? relativeRect(base, step.lassoRect) : base;
+};
+
+const startAssistFingerOnLasso = () => {
+  stopAssistFinger();
+  const total = tutorialDemoLasso.getTotalLength();
+  if (!Number.isFinite(total) || total <= 0) return;
+  tutorialFinger.classList.add('assist-finger');
+  assistFingerStartedAt = performance.now();
+
+  const drawStart = 0.12;
+  const drawEnd = 0.46;
+  const holdEnd = 0.68;
+  const tick = (now: number) => {
+    if (!assistRunning || !tutorialDemoLasso.classList.contains('tut-on')) return;
+    const phase = ((now - assistFingerStartedAt) % ASSIST_LASSO_DURATION_MS) / ASSIST_LASSO_DURATION_MS;
+    let progress = 0;
+    let opacity = 0;
+    if (phase >= drawStart && phase <= drawEnd) {
+      progress = (phase - drawStart) / (drawEnd - drawStart);
+      opacity = 1;
+    } else if (phase > drawEnd && phase <= holdEnd) {
+      progress = 1;
+      opacity = 1;
+    } else if (phase > holdEnd) {
+      progress = 1;
+      opacity = Math.max(0, 1 - (phase - holdEnd) / (1 - holdEnd));
+    }
+    const point = tutorialDemoLasso.getPointAtLength(total * clamp(progress, 0, 1));
+    tutorialFinger.style.opacity = String(opacity);
+    tutorialFinger.style.transform = `translate(${point.x}px, ${point.y}px)`;
+    assistFingerFrame = requestAnimationFrame(tick);
+  };
+  assistFingerFrame = requestAnimationFrame(tick);
+};
+
 const setAssistDemo = (step: AssistStep) => {
   if (step.demo !== 'lasso') {
     tutorialDemoLasso.classList.remove('tut-on');
     tutorialDemoLasso.removeAttribute('d');
+    stopAssistFinger();
     return;
   }
-  const base = assistBaseRectFor(step);
-  const rect = step.lassoRect ? relativeRect(base, step.lassoRect) : base;
+  const rect = assistDemoRectFor(step);
   const cx = rect.x + rect.w * 0.5;
   const cy = rect.y + rect.h * 0.5;
   const rx = rect.w * 0.5;
   const ry = rect.h * 0.5;
   const d = [
     `M ${cx - rx} ${cy}`,
-    `C ${cx - rx * 1.05} ${cy - ry * 0.92}, ${cx + rx * 0.52} ${cy - ry * 1.12}, ${cx + rx} ${cy - ry * 0.14}`,
-    `C ${cx + rx * 1.1} ${cy + ry * 0.82}, ${cx + rx * 0.18} ${cy + ry * 1.08}, ${cx - rx * 0.62} ${cy + ry * 0.86}`,
-    `C ${cx - rx * 1.14} ${cy + ry * 0.42}, ${cx - rx * 1.08} ${cy - ry * 0.18}, ${cx - rx} ${cy} Z`
+    `C ${cx - rx} ${cy - ry * 0.55}, ${cx - rx * 0.52} ${cy - ry}, ${cx + rx * 0.05} ${cy - ry}`,
+    `C ${cx + rx * 0.72} ${cy - ry}, ${cx + rx} ${cy - ry * 0.55}, ${cx + rx} ${cy - ry * 0.03}`,
+    `C ${cx + rx} ${cy + ry * 0.67}, ${cx + rx * 0.5} ${cy + ry}, ${cx - rx * 0.08} ${cy + ry}`,
+    `C ${cx - rx * 0.78} ${cy + ry}, ${cx - rx} ${cy + ry * 0.55}, ${cx - rx} ${cy} Z`
   ].join(' ');
+  tutorialDemoLasso.classList.remove('tut-on');
   tutorialDemoLasso.setAttribute('d', d);
   tutorialDemoLasso.setAttribute('pathLength', '1');
+  void tutorialDemoLasso.getBoundingClientRect();
   tutorialDemoLasso.classList.add('tut-on');
+  startAssistFingerOnLasso();
+};
+
+const updateAssistRuleHighlight = (step: AssistStep) => {
+  document
+    .querySelectorAll('.rule.assist-rule-pulse, .rule.tut-hot')
+    .forEach((el) => el.classList.remove('assist-rule-pulse', 'tut-hot'));
+  if (step.before !== 'select-level-1') return;
+  const rule = rulesContainer.querySelector<HTMLElement>(`.rule[data-rule-name="${levelOneAssistRuleName}"]`);
+  if (!rule) return;
+  rule.classList.add('tut-hot', 'assist-rule-pulse');
 };
 
 const paintAssistDots = () => {
@@ -935,6 +1081,7 @@ const renderAssistStep = () => {
   tutorialBody.textContent = step.body;
   tutorialNext.textContent = assistIndex === assistSteps.length - 1 ? 'Got it' : 'Next';
   paintAssistDots();
+  updateAssistRuleHighlight(step);
 };
 
 const runAssistStepBefore = async (step: AssistStep) => {
@@ -960,6 +1107,7 @@ const startAssist = () => {
   if (tutorialRunning || proofOpen || successOpen) return;
   assistIndex = 0;
   assistRunning = true;
+  document.body.classList.add('assist-on');
   tutorialRoot.hidden = false;
   tutorialRoot.setAttribute('data-active', 'true');
   tutorialRoot.setAttribute('aria-hidden', 'false');
@@ -2168,6 +2316,12 @@ document.addEventListener('click', (e) => {
     stopAssist();
   } else if (action === 'assist-start') {
     void startAssistFromWelcome();
+  } else if (action === 'reset-demo') {
+    resetDemoPanel.setAttribute('data-open', 'true');
+  } else if (action === 'cancel-reset-demo') {
+    resetDemoPanel.removeAttribute('data-open');
+  } else if (action === 'confirm-reset-demo') {
+    resetDemo();
   } else if (action === 'close-help') {
     helpPanel.removeAttribute('data-open');
   }
