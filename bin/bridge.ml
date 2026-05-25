@@ -712,10 +712,26 @@ let graph_rocq g =
   try Format.asprintf "%a" (Graph.pp Rocq) g
   with _ -> "[not a term]"
 
-let proof_step graph_id rw before =
+let title_without_level_prefix p =
+  let prefix = p.level ^ ": " in
+  let prefix_len = String.length prefix in
+  if String.length p.title >= prefix_len && String.sub p.title 0 prefix_len = prefix
+  then String.sub p.title prefix_len (String.length p.title - prefix_len)
+  else p.title
+
+let rule_label st name =
+  match List.mapi (fun idx rule_name -> (idx + 1, rule_name)) (rule_names st)
+        |> List.find_opt (fun (_, rule_name) -> rule_name = name) with
+  | Some (idx, _) -> Printf.sprintf "R%d" idx
+  | None -> "rule"
+
+let proof_step st graph_id move_number rw before =
   let side_prefix = if graph_id = "rhs" then "2: " else "" in
   Printf.sprintf
-    "  transitivity (%s).\n  %smcat.\n  rewrite %s."
+    "  (* Move %d, rewrite with %s (%s) *)\n  transitivity (%s).\n  %smcat.\n  rewrite %s."
+    move_number
+    (rule_label st rw)
+    rw
     (graph_rocq before)
     side_prefix
     rw
@@ -732,7 +748,7 @@ let rec apply_rule st graph_id name selected_ids polygon_opt =
      begin try
         let target_before = Graph.copy st.env (graph_by_id st graph_id) in
         splice_by_nodes st graph_id selected_ids m.repl;
-        let step = proof_step graph_id m.rw target_before in
+        let step = proof_step st graph_id (List.length st.proof + 1) m.rw target_before in
         st.proof <- st.proof @ [step];
         let done_eq = Graph.iso st.lhs st.rhs in
         if done_eq then st.messages <- ["You just made a proof. Every move was checked."]
@@ -783,14 +799,17 @@ and proof_artifact st =
     | steps -> String.concat "\n" steps
   in
   String.concat "\n" [
-    Printf.sprintf "(* %s: %s *)" st.puzzle.level st.puzzle.title;
+    Printf.sprintf "(* %s: %s *)" st.puzzle.level (title_without_level_prefix st.puzzle);
     "Goal";
     Printf.sprintf "  %s" (graph_rocq initial_lhs);
     Printf.sprintf "= %s." (graph_rocq initial_rhs);
     "Proof.";
+    "  (* Prepare diagram *)";
     "  mcat.";
     body;
-    if solved then "  reflexivity." else "  (* Goal not solved yet: continue with checked rewrites. *)";
+    if solved
+    then "  (* Both sides are equal, finish proof with reflexivity *)\n  reflexivity."
+    else "  (* Goal not solved yet: continue with checked rewrites. *)";
     "Qed."
   ]
 
