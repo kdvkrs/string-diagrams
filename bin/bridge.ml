@@ -159,6 +159,13 @@ let parse_state s =
   | e, Eqn ((lhs, rhs), _) -> e, lhs, rhs
   | _, Trm _ -> failwith "expected equation state"
 
+let parse_term_state s =
+  let l = Lexing.from_string s in
+  let x = Parser.rawterm Lexer.token l in
+  match Graph.state x with
+  | e, Trm g -> e, g
+  | _, Eqn _ -> failwith "expected single term, got equation"
+
 let nodes_of_graph g =
   MSet.fold (fun n acc -> n :: acc) [] g#nodes
 
@@ -929,6 +936,42 @@ let export_proof () = js_str (proof_artifact !state_ref)
 
 let get_messages () = arr (List.map js_str !state_ref.messages)
 
+let render_rule formula_js =
+  let formula = Js.to_string formula_js in
+  try
+    let env, lhs, rhs = parse_state formula in
+    unfold_defined_nodes env lhs;
+    unfold_defined_nodes env rhs;
+    let fake_puzzle = { id = ""; level = ""; title = ""; subtitle = ""; source = formula; visible_rules = None } in
+    let st = { puzzle = fake_puzzle; env; lhs; rhs; proof = []; messages = []; undo = []; redo = []; sid_counter = 0 } in
+    obj [
+      "ok", Js.Unsafe.inject Js._true;
+      "lhs", Js.Unsafe.inject (snapshot_graph st "lhs" lhs);
+      "rhs", Js.Unsafe.inject (snapshot_graph st "rhs" rhs)
+    ]
+  with e ->
+    obj [
+      "ok", Js.Unsafe.inject Js._false;
+      "error", Js.Unsafe.inject (js_str (Printexc.to_string e))
+    ]
+
+let render_term formula_js =
+  let formula = Js.to_string formula_js in
+  try
+    let env, g = parse_term_state formula in
+    unfold_defined_nodes env g;
+    let fake_puzzle = { id = ""; level = ""; title = ""; subtitle = ""; source = formula; visible_rules = None } in
+    let st = { puzzle = fake_puzzle; env; lhs = g; rhs = g; proof = []; messages = []; undo = []; redo = []; sid_counter = 0 } in
+    obj [
+      "ok", Js.Unsafe.inject Js._true;
+      "graph", Js.Unsafe.inject (snapshot_graph st "term" g)
+    ]
+  with e ->
+    obj [
+      "ok", Js.Unsafe.inject Js._false;
+      "error", Js.Unsafe.inject (js_str (Printexc.to_string e))
+    ]
+
 let _ =
   Js.export "StringDiagramsBridge"
     (obj [
@@ -941,5 +984,7 @@ let _ =
          "undo", Js.Unsafe.inject (Js.wrap_callback undo);
          "redo", Js.Unsafe.inject (Js.wrap_callback redo);
          "export_proof", Js.Unsafe.inject (Js.wrap_callback export_proof);
-         "get_messages", Js.Unsafe.inject (Js.wrap_callback get_messages)
+         "get_messages", Js.Unsafe.inject (Js.wrap_callback get_messages);
+         "render_term", Js.Unsafe.inject (Js.wrap_callback render_term);
+         "render_rule", Js.Unsafe.inject (Js.wrap_callback render_rule)
        ])

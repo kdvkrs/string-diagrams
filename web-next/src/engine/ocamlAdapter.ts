@@ -19,6 +19,8 @@ type BridgeApi = {
   redo: () => unknown;
   export_proof: () => string;
   get_messages: () => unknown;
+  render_term?: (formula: string) => unknown;
+  render_rule?: (formula: string) => unknown;
 };
 
 declare global {
@@ -249,6 +251,23 @@ export class OcamlAdapter {
 
   exportProof(): string {
     return asString(this.bridge.export_proof());
+  }
+
+  renderTerm(formula: string): ReturnType<typeof parseGraph> {
+    if (!this.bridge.render_term) throw new Error('render_term not available in this bridge build');
+    const raw = this.bridge.render_term(formula) as Record<string, unknown>;
+    if (!asBoolean(raw.ok)) throw new Error(asString(raw.error));
+    return parseGraph((raw.graph ?? {}) as Record<string, unknown>);
+  }
+
+  renderRule(formula: string): { lhs: ReturnType<typeof parseGraph>; rhs: ReturnType<typeof parseGraph> } {
+    if (!this.bridge.render_rule) throw new Error('render_rule not available in this bridge build');
+    const raw = this.bridge.render_rule(formula) as Record<string, unknown>;
+    if (!asBoolean(raw.ok)) throw new Error(asString(raw.error));
+    return {
+      lhs: parseGraph((raw.lhs ?? {}) as Record<string, unknown>),
+      rhs: parseGraph((raw.rhs ?? {}) as Record<string, unknown>),
+    };
   }
 
   getMessages(): string[] {

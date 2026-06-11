@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>String Diagram Renderer</title>
+  <script src="./bridge.bc.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f4f7fb;
+      color: #1a2a38;
+    }
+    h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 16px; }
+    .layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+    .pane { flex: 1; min-width: 280px; }
+    label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #47607a; }
+    textarea {
+      width: 100%;
+      height: 160px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      border: 1px solid #c8d8e8;
+      border-radius: 6px;
+      padding: 10px;
+      resize: vertical;
+      background: #fff;
+    }
+    textarea:focus { outline: 2px solid #4a90d9; border-color: transparent; }
+    .controls { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+    button {
+      padding: 7px 18px;
+      background: #2f6eb5;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #245a9a; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .seg {
+      display: flex;
+      border: 1px solid #c8d8e8;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .seg label {
+      margin: 0;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #47607a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      border-right: 1px solid #c8d8e8;
+    }
+    .seg label:last-child { border-right: none; }
+    .seg input[type="radio"] { display: none; }
+    .seg input[type="radio"]:checked + span { color: #fff; }
+    .seg label:has(input:checked) { background: #2f6eb5; color: #fff; }
+    .check-label {
+      display: flex !important;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #47607a;
+      cursor: pointer;
+      margin: 0 !important;
+    }
+    .check-label input { width: auto; accent-color: #2f6eb5; }
+    .size-row { display: flex; gap: 8px; align-items: center; font-size: 0.8rem; color: #47607a; }
+    .size-row input[type="number"] { width: 64px; padding: 5px 8px; border: 1px solid #c8d8e8; border-radius: 4px; font-size: 0.8rem; }
+    #output { flex: 1; min-width: 200px; }
+    #output-inner {
+      background: #fff;
+      border: 1px solid #c8d8e8;
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #output-inner svg { display: block; max-width: 100%; }
+    #error { color: #c0392b; font-size: 0.8rem; margin-top: 8px; white-space: pre-wrap; }
+    .copy-btn { background: #5a7a9a; font-size: 0.78rem; padding: 5px 12px; }
+    .copy-btn:hover { background: #456070; }
+  </style>
+</head>
+<body>
+  <h1>String Diagram Renderer</h1>
+  <div class="layout">
+    <div class="pane">
+      <label>Mode</label>
+      <div class="controls" style="margin-bottom:10px;margin-top:0">
+        <div class="seg">
+          <label><input type="radio" name="mode" value="term" checked /><span>Single diagram</span></label>
+          <label><input type="radio" name="mode" value="rule" /><span>Rewrite rule</span></label>
+        </div>
+        <label class="check-label">
+          <input type="checkbox" id="show-labels" />
+          Show labels
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="transparent-bg" />
+          Transparent bg
+        </label>
+      </div>
+
+      <label for="formula">Formula</label>
+      <textarea id="formula" spellcheck="false">m: M⊗M -> M
+e: 1 -> M
+------
+e·M ; m</textarea>
+      <div class="controls">
+        <button id="render-btn">Render</button>
+        <div class="size-row">
+          <span>w</span><input id="width-input" type="number" value="220" min="80" max="1200" />
+          <span>h</span><input id="height-input" type="number" value="140" min="60" max="800" />
+        </div>
+      </div>
+      <div id="error"></div>
+    </div>
+    <div id="output">
+      <label>Preview</label>
+      <div id="output-inner"><span style="color:#8da0b3;font-size:0.85rem">Click Render</span></div>
+      <div class="controls" style="margin-top:10px">
+        <button class="copy-btn" id="copy-svg-btn" style="display:none">Copy SVG</button>
+        <button class="copy-btn" id="download-btn" style="display:none">Download SVG</button>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/render.ts"></script>
+</body>
+</html>
