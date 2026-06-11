@@ -97,26 +97,32 @@
   </style>
 </head>
 <body>
-  <h1>String Diagram Renderer</h1>
+  <div class="controls" style="justify-content:space-between;margin:0 0 16px">
+    <h1 id="renderer-title" style="margin:0">String Diagram Renderer</h1>
+    <label class="check-label" for="locale-actions">
+      <span id="language-label">Language</span>
+      <select id="locale-actions"></select>
+    </label>
+  </div>
   <div class="layout">
     <div class="pane">
-      <label>Mode</label>
+      <label id="mode-label">Mode</label>
       <div class="controls" style="margin-bottom:10px;margin-top:0">
         <div class="seg">
-          <label><input type="radio" name="mode" value="term" checked /><span>Single diagram</span></label>
-          <label><input type="radio" name="mode" value="rule" /><span>Rewrite rule</span></label>
+          <label><input type="radio" name="mode" value="term" checked /><span id="single-diagram-label">Single diagram</span></label>
+          <label><input type="radio" name="mode" value="rule" /><span id="rewrite-rule-label">Rewrite rule</span></label>
         </div>
         <label class="check-label">
           <input type="checkbox" id="show-labels" />
-          Show labels
+          <span id="show-labels-label">Show labels</span>
         </label>
         <label class="check-label">
           <input type="checkbox" id="transparent-bg" />
-          Transparent bg
+          <span id="transparent-bg-label">Transparent bg</span>
         </label>
       </div>
 
-      <label for="formula">Formula</label>
+      <label for="formula" id="formula-label">Formula</label>
       <textarea id="formula" spellcheck="false">m: M⊗M -> M
 e: 1 -> M
 ------
@@ -131,8 +137,8 @@ e·M ; m</textarea>
       <div id="error"></div>
     </div>
     <div id="output">
-      <label>Preview</label>
-      <div id="output-inner"><span style="color:#8da0b3;font-size:0.85rem">Click Render</span></div>
+      <label id="preview-label">Preview</label>
+      <div id="output-inner"><span id="preview-placeholder" style="color:#8da0b3;font-size:0.85rem">Click Render</span></div>
       <div class="controls" style="margin-top:10px">
         <button class="copy-btn" id="copy-svg-btn" style="display:none">Copy SVG</button>
         <button class="copy-btn" id="download-btn" style="display:none">Download SVG</button>

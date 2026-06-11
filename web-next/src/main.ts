@@ -12,6 +12,7 @@ import {
   toScreen,
   rulePreviewSvg as rulePreviewSvgBase,
 } from './diagramSvg';
+import { getInitialLocale, localizePuzzle, localizePuzzles, storeLocale, supportedLocales, switchLocale, translations, type Locale } from './i18n';
 type PanelMap = { lhs: Rect; rhs: Rect };
 type CrossingDiagnostic = { graphId: string; edgeA: string; edgeB: string; point: Point };
 type AssistPlacement = 'top' | 'right' | 'bottom' | 'left';
@@ -37,6 +38,12 @@ type LayoutState = {
 
 const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
 const ASSIST_STAGE_SELECTOR = '.stage';
+const locale: Locale = getInitialLocale();
+const t = translations[locale];
+
+storeLocale(locale);
+document.documentElement.lang = locale;
+document.title = t.appTitle;
 
 const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
   {
@@ -45,9 +52,9 @@ const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
     focusRect: 'lhs',
     // Manual tuning hook: relative to the focused LHS region, not the whole viewport.
     lassoRect: { x: 0.18, y: 0.18, w: 0.42, h: 0.46 },
-    kicker: 'Step 1 of 4',
-    title: 'Circle a tangle',
-    body: 'Drag your finger around a small piece of the diagram on the left to select it.',
+    kicker: t.assist.level1[0].kicker,
+    title: t.assist.level1[0].title,
+    body: t.assist.level1[0].body,
     placement: 'right',
     selectionDemo: 'level-1-em',
     demo: 'lasso'
@@ -56,9 +63,9 @@ const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
     selector: '#rules',
     padding: 8,
     before: 'select-level-1',
-    kicker: 'Step 2 of 4',
-    title: 'Pick a move that fits',
-    body: 'When your selection matches a rule, that card lights up. Tap it to apply the move.',
+    kicker: t.assist.level1[1].kicker,
+    title: t.assist.level1[1].title,
+    body: t.assist.level1[1].body,
     placement: 'top'
   },
   {
@@ -66,17 +73,17 @@ const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
     padding: 8,
     focusRect: 'lhs',
     before: 'apply-level-1',
-    kicker: 'Step 3 of 4',
-    title: 'That part transformed',
-    body: 'The selected tangle was replaced by a simpler piece. That rewrite was checked.',
+    kicker: t.assist.level1[2].kicker,
+    title: t.assist.level1[2].title,
+    body: t.assist.level1[2].body,
     placement: 'right'
   },
   {
     selector: ASSIST_STAGE_SELECTOR,
     padding: 8,
-    kicker: 'Step 4 of 4',
-    title: 'Match both sides',
-    body: 'Keep making checked moves until the diagrams on both sides match.',
+    kicker: t.assist.level1[3].kicker,
+    title: t.assist.level1[3].title,
+    body: t.assist.level1[3].body,
     placement: 'top'
   }
 ];
@@ -86,9 +93,9 @@ const ASSIST_STEPS_LEVEL_3: AssistStep[] = [
     selector: ASSIST_STAGE_SELECTOR,
     padding: 8,
     focusRect: 'rhs',
-    kicker: 'Hint',
-    title: 'You can also transform the right side',
-    body: 'In this level, you will have to manipulate both diagrams to get them to match.',
+    kicker: t.assist.level3[0].kicker,
+    title: t.assist.level3[0].title,
+    body: t.assist.level3[0].body,
     placement: 'left'
   }
 ];
@@ -97,9 +104,9 @@ const ASSIST_STEPS_LEVEL_5: AssistStep[] = [
   {
     selector: '#rules',
     padding: 8,
-    kicker: 'Hint',
-    title: 'More moves are available',
-    body: 'The rule row scrolls sideways. In this level, slide the moves at the bottom to find the rule you need.',
+    kicker: t.assist.level5[0].kicker,
+    title: t.assist.level5[0].title,
+    body: t.assist.level5[0].body,
     placement: 'top'
   }
 ];
@@ -133,15 +140,21 @@ installKioskGestureGuards();
 app.innerHTML = `
   <header class="topbar">
     <div class="left">
-      <label class="level-menu" aria-label="Choose puzzle level">
-        <span>Level</span>
+      <label class="level-menu" aria-label="${t.choosePuzzleLevel}">
+        <span>${t.levelLabel}</span>
         <select id="level-actions"></select>
       </label>
-      <button class="btn" data-action="reset">Reset</button>
-      <button class="btn icon-btn" data-action="undo" aria-label="Undo">
+      <label class="level-menu locale-menu" aria-label="${t.chooseLanguage}">
+        <span>${t.languageLabel}</span>
+        <select id="locale-actions">
+          ${supportedLocales.map((value) => `<option value="${value}"${value === locale ? ' selected' : ''}>${translations[value].languageName}</option>`).join('')}
+        </select>
+      </label>
+      <button class="btn" data-action="reset">${t.reset}</button>
+      <button class="btn icon-btn" data-action="undo" aria-label="${t.undo}">
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
       </button>
-      <button class="btn icon-btn" data-action="redo" aria-label="Redo">
+      <button class="btn icon-btn" data-action="redo" aria-label="${t.redo}">
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3"/></svg>
       </button>
     </div>
@@ -149,36 +162,35 @@ app.innerHTML = `
       <span class="dot"></span>
       <span id="subtitle-text"></span>
     </div>
-    <button class="btn help-btn" data-action="help" aria-label="Show help">?</button>
+    <button class="btn help-btn" data-action="help" aria-label="${t.showHelp}">?</button>
   </header>
   <main class="stages">
     <div class="stage">
-      <canvas id="stage" aria-label="diagram stage"></canvas>
+      <canvas id="stage" aria-label="${t.diagramStage}"></canvas>
     </div>
     <div id="success-modal" role="dialog" aria-modal="true" aria-labelledby="success-title">
       <canvas id="confetti-canvas"></canvas>
       <div class="modal modal--success">
         <div class="modal-check" aria-hidden="true">✓</div>
-        <div class="modal-title" id="success-title">You untangled it!</div>
+        <div class="modal-title" id="success-title">${t.successTitle}</div>
         <div class="modal-body">
-          Every move you made followed a rule.<br/>
-          A computer just checked your reasoning.
+          ${t.successBodyHtml}
         </div>
         <div class="modal-actions">
-          <button class="btn" data-action="play-again">Play again</button>
-          <button class="btn btn--primary" data-action="see-proof">See what you did</button>
-          <button class="btn btn--primary" data-action="next-level">Next level</button>
+          <button class="btn" data-action="play-again">${t.playAgain}</button>
+          <button class="btn btn--primary" data-action="see-proof">${t.seeProof}</button>
+          <button class="btn btn--primary" data-action="next-level">${t.nextLevel}</button>
         </div>
       </div>
       <div class="modal modal--end">
         <div class="modal-check" aria-hidden="true">★</div>
-        <div class="modal-title">Congratulations!</div>
+        <div class="modal-title">${t.congratulations}</div>
         <div class="modal-body">
-          You untangled all diagrams and wrote five machine-checked proofs.
+          ${t.finalSuccessBody}
         </div>
         <div class="modal-actions">
-          <button class="btn" data-action="play-again">Replay final level</button>
-          <button class="btn btn--primary" data-action="see-proof">See what you did</button>
+          <button class="btn" data-action="play-again">${t.replayFinalLevel}</button>
+          <button class="btn btn--primary" data-action="see-proof">${t.seeProof}</button>
         </div>
       </div>
     </div>
@@ -186,16 +198,16 @@ app.innerHTML = `
       <div class="proof-card">
         <div class="proof-head">
           <div>
-            <div class="proof-kicker">Rocq proof script</div>
-            <h2 id="proof-title">Your proof</h2>
+            <div class="proof-kicker">${t.proofKicker}</div>
+            <h2 id="proof-title">${t.yourProof}</h2>
           </div>
         </div>
-        <p class="proof-explainer">Every transformation you made can be expressed as a step in the Rocq theorem prover.</p>
+        <p class="proof-explainer">${t.proofExplainer}</p>
         <pre id="proof" class="rocq-proof"></pre>
         <div class="proof-share-status" id="proof-share-status" aria-live="polite"></div>
         <div class="proof-actions">
-          <button class="btn" id="proof-share-action" data-action="share-proof">Share proof</button>
-          <button class="btn btn--primary" id="proof-primary-action" data-action="next-level">Next level</button>
+          <button class="btn" id="proof-share-action" data-action="share-proof">${t.shareProof}</button>
+          <button class="btn btn--primary" id="proof-primary-action" data-action="next-level">${t.nextLevel}</button>
         </div>
       </div>
     </div>
@@ -203,52 +215,50 @@ app.innerHTML = `
       <div class="help-card">
         <div class="proof-head">
           <div>
-            <div class="proof-kicker">How to play</div>
-            <h2>Make the diagrams match</h2>
+            <div class="proof-kicker">${t.howToPlay}</div>
+            <h2>${t.makeDiagramsMatch}</h2>
           </div>
-          <button class="btn" data-action="close-help">Close</button>
+          <button class="btn" data-action="close-help">${t.close}</button>
         </div>
-        <p>Your goal is to transform the diagrams on either side until both sides match.</p>
-        <p>Use the rewriting rules at the bottom of the screen: select a part of a diagram that matches a rule, then press that rule to transform the selected part.</p>
-        <p>Every move is checked by the proof engine. When the diagrams match, you have made a proof.</p>
+        ${t.helpParagraphs.map((paragraph) => `<p>${paragraph}</p>`).join('')}
       </div>
     </div>
     <div id="tutorial-panel" aria-live="polite">
       <div class="tutorial-card">
         <div class="proof-head">
           <div>
-            <div class="proof-kicker">How to play</div>
-            <h2>Make the diagrams match</h2>
+            <div class="proof-kicker">${t.howToPlay}</div>
+            <h2>${t.makeDiagramsMatch}</h2>
           </div>
-          <button class="btn" data-action="close-tutorial">Close</button>
+          <button class="btn" data-action="close-tutorial">${t.close}</button>
         </div>
-        <p class="tutorial-copy">Your goal is to transform the diagrams on either side until both sides match. Select a part that matches a rule, then press that rule to transform it.</p>
+        <p class="tutorial-copy">${t.tutorialCopy}</p>
         <div class="tutorial-stage-wrap">
-          <canvas id="tutorial-stage" aria-label="tutorial diagram stage"></canvas>
+          <canvas id="tutorial-stage" aria-label="${t.tutorialDiagramStage}"></canvas>
         </div>
         <button class="rule tutorial-rule" id="tutorial-rule-card" type="button">
-          <div class="rule-meta"><span class="rule-badge">Move</span><span class="rule-name">checked rule</span></div>
+          <div class="rule-meta"><span class="rule-badge">${t.move}</span><span class="rule-name">${t.checkedRule}</span></div>
           <div class="tutorial-rule-preview" id="tutorial-rule-preview" aria-hidden="true"></div>
         </button>
       </div>
     </div>
     <div id="assist-welcome-panel">
       <div class="assist-welcome-card">
-        <div class="modal-title">Can you untangle the proof?</div>
-        <div class="modal-body">Your goal in this puzzle is to get both diagrams to match.</div>
+        <div class="modal-title">${t.welcomeTitle}</div>
+        <div class="modal-body">${t.welcomeBody}</div>
         <img class="assist-welcome-image" src="./sd_upscaled.png" alt="" aria-hidden="true"/>
         <div class="modal-actions">
-          <button class="btn btn--primary" data-action="assist-start">Start demo</button>
+          <button class="btn btn--primary" data-action="assist-start">${t.startDemo}</button>
         </div>
       </div>
     </div>
     <div id="reset-demo-panel" role="dialog" aria-modal="true" aria-labelledby="reset-demo-title">
       <div class="modal reset-demo-card">
-        <div class="modal-title" id="reset-demo-title">Are you sure you want to start over?</div>
-        <div class="modal-body">This will reset the demo to Level 1 and clear the current proof run.</div>
+        <div class="modal-title" id="reset-demo-title">${t.resetDemoTitle}</div>
+        <div class="modal-body">${t.resetDemoBody}</div>
         <div class="modal-actions">
-          <button class="btn" data-action="cancel-reset-demo">Cancel</button>
-          <button class="btn btn--primary" data-action="confirm-reset-demo">Start over</button>
+          <button class="btn" data-action="cancel-reset-demo">${t.cancel}</button>
+          <button class="btn btn--primary" data-action="confirm-reset-demo">${t.startOver}</button>
         </div>
       </div>
     </div>
@@ -269,19 +279,19 @@ app.innerHTML = `
     </svg>
     <div class="tut-card" id="tutorial-card" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
       <div class="tut-tail"></div>
-      <div class="tut-card-kicker" id="tutorial-kicker">Step 1 of 3</div>
-      <h2 class="tut-card-title" id="tutorial-title">Circle a tangle</h2>
-      <p class="tut-card-body" id="tutorial-body">Drag your finger around a small piece of the diagram on the left.</p>
+      <div class="tut-card-kicker" id="tutorial-kicker">${t.assist.level1[0].kicker}</div>
+      <h2 class="tut-card-title" id="tutorial-title">${t.assist.level1[0].title}</h2>
+      <p class="tut-card-body" id="tutorial-body">${t.assist.level1[0].body}</p>
       <div class="tut-card-foot">
         <div class="tut-dots" id="tutorial-dots"></div>
         <div class="tut-actions">
-          <button class="tut-btn tut-btn--ghost" data-action="assist-skip">Skip</button>
-          <button class="tut-btn tut-btn--primary" data-action="assist-next" id="tutorial-next">Next</button>
+          <button class="tut-btn tut-btn--ghost" data-action="assist-skip">${t.skip}</button>
+          <button class="tut-btn tut-btn--primary" data-action="assist-next" id="tutorial-next">${t.next}</button>
         </div>
       </div>
     </div>
   </div>
-  <div class="tut-caption" id="tutorial-caption" aria-hidden="true">Circle a real rewrite</div>
+  <div class="tut-caption" id="tutorial-caption" aria-hidden="true">${t.circleRealRewrite}</div>
   <div class="selection-feedback" id="selection-feedback" aria-live="polite"></div>
   <div class="tut-finger" id="tutorial-finger" aria-hidden="true">
     <svg viewBox="0 0 56 64">
@@ -295,23 +305,23 @@ app.innerHTML = `
       <strong>Perf</strong>
       <button type="button" data-perf-action="crossings">Cross</button>
       <button type="button" data-perf-action="selection">Sel</button>
-      <button type="button" data-perf-action="reset">Reset</button>
+      <button type="button" data-perf-action="reset">${t.reset}</button>
       <button type="button" data-perf-action="copy">Copy</button>
       <button type="button" data-perf-action="hide">Hide</button>
     </div>
     <pre id="perf-output"></pre>
   </div>
   <footer class="dock">
-    <div class="dock-label">Moves</div>
+    <div class="dock-label">${t.moves}</div>
     <div class="rules-shell" id="rules-shell">
       <div class="rules" id="rules"></div>
-      <div class="rules-scroll-cue" aria-hidden="true">slide for more moves</div>
+      <div class="rules-scroll-cue" aria-hidden="true">${t.slideForMoreMoves}</div>
     </div>
     <div class="move-counter" data-move-counter>
-      <b id="move-count">0</b> moves<br/>
-      <span>so far</span>
+      <b id="move-count">0</b> ${t.moves}<br/>
+      <span>${t.soFar}</span>
     </div>
-    <button class="reset-demo-trigger" data-action="reset-demo" type="button">Reset demo</button>
+    <button class="reset-demo-trigger" data-action="reset-demo" type="button">${t.resetDemo}</button>
   </footer>
 `;
 
@@ -352,6 +362,7 @@ const tutorialRipple = document.querySelector<HTMLElement>('#tutorial-ripple');
 const perfPanel = document.querySelector<HTMLElement>('#perf-panel');
 const perfOutput = document.querySelector<HTMLPreElement>('#perf-output');
 const levelActions = document.querySelector<HTMLSelectElement>('#level-actions');
+const localeActions = document.querySelector<HTMLSelectElement>('#locale-actions');
 const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 if (
@@ -360,7 +371,7 @@ if (
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
   !perfPanel || !perfOutput ||
-  !levelActions || !rulesShell || !rulesContainer
+  !levelActions || !localeActions || !rulesShell || !rulesContainer
 ) {
   throw new Error('Missing required UI element');
 }
@@ -370,12 +381,30 @@ const tutorialCtx = tutorialCanvas.getContext('2d');
 if (!tutorialCtx) throw new Error('Tutorial 2D context unavailable');
 
 const adapter = new OcamlAdapter(DEFAULT_PUZZLE_ID);
-const puzzles = adapter.listDemos();
-let scene: SceneState = adapter.getScene();
+const puzzles = localizePuzzles(adapter.listDemos(), t);
+const localizeScene = (nextScene: SceneState): SceneState => {
+  const puzzle = localizePuzzle(
+    {
+      id: nextScene.puzzleId,
+      level: nextScene.level,
+      title: nextScene.title,
+      subtitle: nextScene.subtitle
+    },
+    t
+  );
+  return {
+    ...nextScene,
+    level: puzzle.level,
+    title: puzzle.title,
+    subtitle: puzzle.subtitle,
+    messages: nextScene.messages.map(t.sceneMessage)
+  };
+};
+let scene: SceneState = localizeScene(adapter.getScene());
 let layouts: LayoutState | null = null;
 let layoutEpoch = 0;
 let activePuzzleId = scene.puzzleId || DEFAULT_PUZZLE_ID;
-const disabledRulesFor = (s: SceneState, reason = 'No selection'): RuleAvailability[] =>
+const disabledRulesFor = (s: SceneState, reason = t.reason('No selection')): RuleAvailability[] =>
   s.rules.map((rule) => ({ name: rule.name, enabled: false, reason }));
 let rules: RuleAvailability[] = disabledRulesFor(scene);
 
@@ -423,10 +452,10 @@ const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
-    const t = window.setTimeout(resolve, ms);
+    const timeout = window.setTimeout(resolve, ms);
     signal?.addEventListener('abort', () => {
-      window.clearTimeout(t);
-      reject(new Error('tutorial aborted'));
+      window.clearTimeout(timeout);
+      reject(new Error(t.tutorialAborted));
     }, { once: true });
   });
 
@@ -711,7 +740,7 @@ const highlightRocqLine = (line: string) => {
 
 const highlightRocq = (script: string) => script.split('\n').map(highlightRocqLine).join('\n');
 
-const currentProofText = () => scene.proofText || adapter.exportProof() || 'No proof yet.';
+const currentProofText = () => scene.proofText || adapter.exportProof() || t.noProofYet;
 
 const proofFileName = () => {
   const puzzle = puzzles.find((p) => p.id === activePuzzleId);
@@ -730,7 +759,7 @@ const setProofShareStatus = (message: string) => {
 
 const shareProof = async () => {
   const proofText = currentProofText();
-  const title = proofTitle.textContent || 'Rocq proof';
+  const title = proofTitle.textContent || t.proofKicker;
   const file = new File([proofText], proofFileName(), { type: 'text/plain' });
   const nav = navigator as Navigator & {
     canShare?: (data: ShareData & { files?: File[] }) => boolean;
@@ -739,13 +768,13 @@ const shareProof = async () => {
 
   try {
     if (nav.share && nav.canShare?.({ files: [file] })) {
-      await nav.share({ title, text: 'Machine-checked string diagram proof', files: [file] });
-      setProofShareStatus('Opened the share sheet.');
+      await nav.share({ title, text: t.proofShareText, files: [file] });
+      setProofShareStatus(t.shareSheetOpened);
       return;
     }
     if (nav.share) {
       await nav.share({ title, text: proofText });
-      setProofShareStatus('Opened the share sheet.');
+      setProofShareStatus(t.shareSheetOpened);
       return;
     }
   } catch (error) {
@@ -758,9 +787,9 @@ const shareProof = async () => {
 
   try {
     await navigator.clipboard.writeText(proofText);
-    setProofShareStatus('Copied proof to clipboard.');
+    setProofShareStatus(t.proofCopied);
   } catch {
-    setProofShareStatus('Sharing is unavailable here. Select the proof text to copy it.');
+    setProofShareStatus(t.shareUnavailable);
   }
 };
 
@@ -773,7 +802,7 @@ const showSuccess = () => {
   successModal.toggleAttribute('data-final', !hasNext);
   if (nextButton) {
     nextButton.hidden = !hasNext;
-    nextButton.textContent = hasNext ? `Next: ${puzzles[idx + 1].level}` : 'Next level';
+    nextButton.textContent = hasNext ? t.nextLabel(puzzles[idx + 1].level) : t.nextLevel;
   }
   successModal.setAttribute('data-open', 'true');
   fireConfetti(!hasNext);
@@ -786,8 +815,8 @@ const showProof = () => {
   const puzzle = puzzles.find((p) => p.id === activePuzzleId);
   const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
   const hasNext = idx >= 0 && idx < puzzles.length - 1;
-  proofTitle.textContent = `Your proof for ${puzzle ? displayPuzzleTitle(puzzle) : scene.title}`;
-  proofPrimaryAction.textContent = hasNext ? 'Next level' : 'Close';
+  proofTitle.textContent = t.proofFor(puzzle ? displayPuzzleTitle(puzzle) : scene.title);
+  proofPrimaryAction.textContent = hasNext ? t.nextLevel : t.close;
   proofPrimaryAction.dataset.action = hasNext ? 'next-level' : 'close-proof';
   proof.innerHTML = highlightRocq(currentProofText());
   setProofShareStatus('');
@@ -801,12 +830,12 @@ const startTutorial = async () => {
   const signal = tutorialAbort.signal;
   document.body.classList.add('tut-on');
   tutorialPanel.setAttribute('data-open', 'true');
-  tutorialCaption.textContent = 'Loading a tiny proof...';
+  tutorialCaption.textContent = t.loadingTinyProof;
   tutorialFinger.style.transform = 'translate(-120px, -120px)';
   try {
     const demo = adapter.tutorialDemo(DEFAULT_PUZZLE_ID);
     if (!demo.ok || !demo.initialScene || !demo.selection || !demo.ruleName || !demo.result?.scene) {
-      throw new Error(demo.error || 'Tutorial data is incomplete');
+      throw new Error(demo.error || t.tutorialDataIncomplete);
     }
     const initialLayouts = new Map(
       await Promise.all(demo.initialScene.graphs.map(async (graph) => [graph.id, await layoutSceneGraph(graph)] as const))
@@ -854,26 +883,26 @@ const startTutorial = async () => {
     const selectedSet = new Set(demo.selection.selectedNodeIds);
     const tutorialGraphId = demo.selection.graphId === 'rhs' ? 'rhs' : 'lhs';
     const selectedLayout = initialLayouts.get(tutorialGraphId);
-    if (!selectedLayout) throw new Error('Tutorial selected graph is missing');
+    if (!selectedLayout) throw new Error(t.tutorialSelectedGraphMissing);
     const path = lassoPathForSelection(demo.selection, panels[tutorialGraphId], selectedLayout);
-    tutorialCaption.textContent = 'Circle a tangle';
+    tutorialCaption.textContent = t.circleTangle;
     await fingerTo(tutorialCanvasPointToPage(path[0]), 500, signal);
     tutorialFinger.style.transition = 'none';
     const start = performance.now();
     while (true) {
-      if (signal.aborted) throw new Error('tutorial aborted');
-      const t = clamp((performance.now() - start) / 1400, 0, 1);
-      const partial = interpolateClosedPath(path, t);
+      if (signal.aborted) throw new Error(t.tutorialAborted);
+      const progress = clamp((performance.now() - start) / 1400, 0, 1);
+      const partial = interpolateClosedPath(path, progress);
       const head = partial[partial.length - 1] ?? path[0];
       const pageHead = tutorialCanvasPointToPage(head);
       tutorialFinger.style.transform = `translate(${pageHead.x}px, ${pageHead.y}px)`;
       drawTutorial(initialLayouts, selectedSet, partial);
-      if (t >= 1) break;
+      if (progress >= 1) break;
       await frame();
     }
     drawTutorial(initialLayouts, selectedSet, path);
     await sleep(450, signal);
-    tutorialCaption.textContent = 'Pick a checked move';
+    tutorialCaption.textContent = t.pickCheckedMove;
     tutorialRuleCard.classList.add('tut-hot');
     const r = tutorialRuleCard.getBoundingClientRect();
     const p = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
@@ -882,14 +911,14 @@ const startTutorial = async () => {
     tutorialRuleCard.classList.add('tut-pressed');
     await sleep(180, signal);
     tutorialRuleCard.classList.remove('tut-pressed');
-    tutorialCaption.textContent = 'Watch the real rewrite';
+    tutorialCaption.textContent = t.watchRewrite;
     drawTutorial(resultLayouts);
-    tutorialCaption.textContent = 'Every move was checked';
+    tutorialCaption.textContent = t.everyMoveChecked;
     await sleep(1800, signal);
   } catch (error) {
     if (!signal.aborted) {
       const message = error instanceof Error ? error.message : String(error);
-      scene.messages = ['Tutorial could not start.', message];
+      scene.messages = [t.tutorialCouldNotStart, message];
       render();
     }
   } finally {
@@ -922,7 +951,7 @@ const selectLevelOneAssistTangle = () => {
     selectedNodeIds: [...levelOneAssistSelection.selectedNodeIds]
   };
   rules = adapter.evaluateSelection(currentSelection);
-  scene.messages = [`Selected the first matching tangle. ${levelOneAssistRuleName} is ready.`];
+  scene.messages = [t.selectedFirstTangle(levelOneAssistRuleName)];
   invalidateRuleDock();
   render();
 };
@@ -952,7 +981,7 @@ const applyLevelOneAssistRule = async () => {
     clearSelection();
     await animateRewriteScene(res.scene, selection.graphId, seed, collapseCenter, new Set(selection.selectedNodeIds));
   } else {
-    scene.messages = [res.error || `Rule ${levelOneAssistRuleName} not applicable.`];
+    scene.messages = [res.error ? t.reason(res.error) : t.ruleNotApplicable(levelOneAssistRuleName)];
     render();
   }
 };
@@ -1315,7 +1344,7 @@ const layoutScene = async (nextScene: SceneState) => {
   } catch (error) {
     if (epoch !== layoutEpoch) return;
     const message = error instanceof Error ? error.message : String(error);
-    scene.messages = ['Layout failed.', message];
+    scene.messages = [t.layoutFailed, message];
   }
   render();
 };
@@ -1434,7 +1463,7 @@ const animateSelectionCollapse = async (selection: SelectionDescriptor, duration
   const graph = sourceLayouts?.graphs.get(selection.graphId);
   if (!sourceLayouts || !graph || selection.selectedNodeIds.length === 0) return;
   const epoch = ++layoutEpoch;
-  scene.messages = ['Collapsing the selected rewrite region...'];
+  scene.messages = [t.collapsingRegion];
   const start = performance.now();
   while (true) {
     if (epoch !== layoutEpoch) return;
@@ -1451,8 +1480,9 @@ const animateSelectionCollapse = async (selection: SelectionDescriptor, duration
 
 const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?: LayoutSeed, collapseCenter?: LayoutPoint, selectedNodeIds = new Set<string>()) => {
   const epoch = ++layoutEpoch;
-  const finalMessages = [...nextScene.messages];
-  scene = nextScene;
+  const localizedNextScene = localizeScene(nextScene);
+  const finalMessages = [...localizedNextScene.messages];
+  scene = localizedNextScene;
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
   invalidateRuleDock();
@@ -1465,7 +1495,7 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
     if (oldChanged) nextGraphs.set(graphId, oldChanged);
   }
   layouts = { graphs: nextGraphs, rules: new Map() };
-  scene.messages = ['Replaying checked rewrite...'];
+  scene.messages = [t.replayingRewrite];
   render();
   try {
     const ruleEntries = await Promise.all(
@@ -1497,7 +1527,7 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
           } else {
             nextGraphs.set(graphId, layout);
           }
-          scene.messages = [`Replaying ${graphId}: physics iteration ${iteration}`];
+          scene.messages = [t.replayingIteration(t.graphSide(graphId), iteration)];
           render();
         },
         {
@@ -1512,12 +1542,12 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
       if (epoch !== layoutEpoch) return;
       nextGraphs.set(graphId, finalLayout);
     }
-    scene.messages = finalMessages.length > 0 ? finalMessages : ['Rewrite replay finished.'];
+    scene.messages = finalMessages.length > 0 ? finalMessages : [t.rewriteReplayFinished];
   } catch (error) {
     if (epoch !== layoutEpoch) return;
     const message = error instanceof Error ? error.message : String(error);
-    scene.messages = ['Rewrite animation failed.', message];
-    void layoutScene(nextScene);
+    scene.messages = [t.rewriteAnimationFailed, message];
+    void layoutScene(localizedNextScene);
   } finally {
     if (epoch === layoutEpoch) {
       render();
@@ -1526,7 +1556,7 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
 };
 
 const setScene = (nextScene: SceneState) => {
-  scene = nextScene;
+  scene = localizeScene(nextScene);
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
   invalidateRuleDock();
@@ -1877,18 +1907,18 @@ const pickGraphFromLasso = (panels: PanelMap): 'lhs' | 'rhs' | null => {
 
 const evaluateSelection = (panels: PanelMap) => {
   if (!layouts) {
-    scene.messages = ['Layout is still settling. Try the selection again in a moment.'];
+    scene.messages = [t.layoutSettling];
     return;
   }
   if (lasso.length < 3) {
     currentSelection = emptySelection();
-    rules = disabledRulesFor(scene, 'Select a sub-diagram');
+    rules = disabledRulesFor(scene, t.selectSubDiagram);
     return;
   }
   const graphId = pickGraphFromLasso(panels);
   if (!graphId) {
     currentSelection = emptySelection();
-    rules = disabledRulesFor(scene, 'Select either side');
+    rules = disabledRulesFor(scene, t.selectEitherSide);
     return;
   }
   const layout = layouts.graphs.get(graphId);
@@ -1905,11 +1935,11 @@ const evaluateSelection = (panels: PanelMap) => {
   };
   rules = perf.time('ocaml.evaluateSelection', () => adapter.evaluateSelection(currentSelection));
   if (!rules.some((r) => r.enabled)) {
-    const why = rules.map((r) => `${r.name}: ${r.reason ?? 'not applicable'}`).join(' | ');
-    scene.messages = [`No rule matches this ${graphId} selection (${selected.length} nodes).`, why];
-    showSelectionFeedback('No rules match your selection. Try circling another tangle.');
+    const why = rules.map((r) => `${r.name}: ${r.reason ? t.reason(r.reason) : t.notApplicable}`).join(' | ');
+    scene.messages = [t.noRuleMatches(t.graphSide(graphId), selected.length), why];
+    showSelectionFeedback(t.noRulesMatchFeedback);
   } else {
-    scene.messages = [`Selection on ${graphId}: ${selected.length} node(s). Applicable rules highlighted.`];
+    scene.messages = [t.selectionSummary(t.graphSide(graphId), selected.length)];
     hideSelectionFeedback();
   }
 };
@@ -1929,9 +1959,9 @@ const drawRulePreview = (container: HTMLElement, name: string, dimmed: boolean) 
   const rule = layouts?.rules.get(name);
   if (!rule) {
     container.innerHTML = `
-      <svg class="rule-preview-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="rewrite rule preview loading" xmlns="http://www.w3.org/2000/svg">
+      <svg class="rule-preview-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${t.rulePreviewLoading}" xmlns="http://www.w3.org/2000/svg">
         <rect width="${width}" height="${height}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
-        <text x="${width * 0.5}" y="${height * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">layout...</text>
+        <text x="${width * 0.5}" y="${height * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">${t.layoutLoading}</text>
       </svg>
     `;
     return;
@@ -1943,7 +1973,7 @@ const renderLevelButtons = () => {
   const key = `${activePuzzleId}|${puzzles.map((p) => `${p.id}:${p.level}:${p.title}`).join(',')}`;
   if (key === renderedLevelsKey) return;
   renderedLevelsKey = key;
-  const labelFor = (puzzle: PuzzleInfo) => `${puzzle.level}: ${puzzle.title.replace(/^Level\s+\d+:\s*/, '')}`;
+  const labelFor = (puzzle: PuzzleInfo) => `${puzzle.level}: ${displayPuzzleTitle(puzzle)}`;
   levelActions.replaceChildren(
     ...puzzles.map((puzzle: PuzzleInfo) => {
       const option = document.createElement('option');
@@ -1967,11 +1997,11 @@ const updateRuleScrollState = () => {
 };
 
 const refreshUi = () => {
-  const lastMessage = scene.messages[0] || scene.subtitle || 'Lasso a tangle, then pick a move';
+  const lastMessage = scene.messages[0] || scene.subtitle || t.lassoPrompt;
   const hasSelection = currentSelection.selectedNodeIds.length > 0;
   const hasEnabledRule = rules.some((r) => r.enabled);
   subtitle.textContent = hasSelection && hasEnabledRule
-    ? `${currentSelection.selectedNodeIds.length} piece(s) selected. Pick a lit-up move.`
+    ? t.selectedPiecesPrompt(currentSelection.selectedNodeIds.length)
     : lastMessage;
   if (proofOpen) proof.innerHTML = highlightRocq(currentProofText());
   renderLevelButtons();
@@ -1991,7 +2021,7 @@ const refreshUi = () => {
   rulesContainer.replaceChildren(
     ...scene.rules.map((rule, idx) => {
       const name = rule.name;
-      const ra = rules.find((r) => r.name === name) ?? { name, enabled: false, reason: 'Unavailable' };
+      const ra = rules.find((r) => r.name === name) ?? { name, enabled: false, reason: t.unavailable };
       const dimmed = hasSelection && !ra.enabled;
       const btn = document.createElement('button');
       btn.className = 'rule';
@@ -2001,7 +2031,7 @@ const refreshUi = () => {
       btn.dataset.ruleName = name;
       btn.dataset.ruleKey = `R${idx + 1}`;
       btn.disabled = !ra.enabled;
-      btn.title = ra.enabled ? `Apply ${name}` : ra.reason ?? 'Not applicable';
+      btn.title = ra.enabled ? t.applyRule(name) : t.reason(ra.reason ?? t.notApplicable);
       btn.innerHTML = `
         <div class="rule-meta"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
         <div class="rule-preview" aria-hidden="true"></div>
@@ -2130,7 +2160,7 @@ const finishDrag = (p: Point) => {
   if (!inEither || lasso.length < 3) {
     lasso = [];
     currentSelection = emptySelection();
-    rules = disabledRulesFor(scene, 'Select a sub-diagram');
+    rules = disabledRulesFor(scene, t.selectSubDiagram);
     render();
     return;
   }
@@ -2147,7 +2177,7 @@ const cancelDrag = () => {
 const clearSelection = () => {
   lasso = [];
   currentSelection = emptySelection();
-  rules = disabledRulesFor(scene, 'Select a sub-diagram');
+  rules = disabledRulesFor(scene, t.selectSubDiagram);
   hideSelectionFeedback();
 };
 
@@ -2166,7 +2196,7 @@ const applyRuleFromButton = async (btn: HTMLButtonElement) => {
     await animateRewriteScene(res.scene, selection.graphId, seed, collapseCenter, new Set(selection.selectedNodeIds));
     if (solved) showSuccess();
   } else {
-    scene.messages = [res.error || `Rule ${name} not applicable.`];
+    scene.messages = [res.error ? t.reason(res.error) : t.ruleNotApplicable(name)];
     render();
   }
 };
@@ -2232,7 +2262,7 @@ document.addEventListener('click', (e) => {
     } else if (action === 'copy') {
       const text = JSON.stringify(perf.snapshot(), null, 2);
       void navigator.clipboard?.writeText(text).catch(() => undefined);
-      perfOutput.textContent = `${formatPerfRows()}\n\nCopied JSON if clipboard access is available.`;
+      perfOutput.textContent = `${formatPerfRows()}\n\n${t.copiedJson}`;
     } else if (action === 'hide') {
       hidePerfPanel();
     }
@@ -2318,6 +2348,11 @@ document.addEventListener('keydown', (e) => {
 
 levelActions.addEventListener('change', () => {
   loadPuzzle(levelActions.value || DEFAULT_PUZZLE_ID);
+});
+
+localeActions.addEventListener('change', () => {
+  const nextLocale = localeActions.value;
+  if (nextLocale === 'en' || nextLocale === 'de') switchLocale(nextLocale);
 });
 
 rulesContainer.addEventListener(

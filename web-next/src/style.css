@@ -93,6 +93,10 @@ button {
   cursor: pointer;
 }
 
+.locale-menu select {
+  min-width: 104px;
+}
+
 .level-menu::after {
   content: "⌄";
   margin-left: -28px;
