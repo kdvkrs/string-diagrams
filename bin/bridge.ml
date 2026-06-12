@@ -387,6 +387,15 @@ type rule_match = {
   repl: graph;
 }
 
+type rule_direction = Forward | Backward
+
+type rule_candidate = {
+  candidate_rule_name: string;
+  candidate_graph_id: string;
+  candidate_selected_ids: string list;
+  candidate_direction: rule_direction;
+}
+
 type extraction_variant = {
   inputs: (Graph_type.iport * Graph_type.oport) list;
   outputs: (Graph_type.iport * Graph_type.oport) list;
@@ -650,6 +659,209 @@ let safe_find_rule_match_with_debug st graph_id name selected_ids debug =
   try find_rule_match_with_debug st graph_id name selected_ids debug with
   | e -> Error (Printf.sprintf "rule check failed: %s" (Printexc.to_string e))
 
+let kind_label (n: node) =
+  match n#kind with
+  | Var f -> "var", f
+  | Box _ -> "box", "box"
+
+let node_signature (n: node) =
+  let kind, label = kind_label n in
+  String.concat "\031" [
+    label;
+    kind;
+    string_of_int n#nsources;
+    string_of_int n#ntargets;
+    String.concat "," (List.map typ_name n#sources);
+    String.concat "," (List.map typ_name n#targets)
+  ]
+
+let compatible_nodes a b = node_signature a = node_signature b
+
+let nodes_of_graph_sorted g =
+  nodes_of_graph g
+  |> List.sort (fun a b -> compare (node_signature a) (node_signature b))
+
+let index_scene_nodes g =
+  let tbl = Hashtbl.create 17 in
+  List.iter
+    (fun n ->
+      let sig_ = node_signature n in
+      let prev = match Hashtbl.find_opt tbl sig_ with Some xs -> xs | None -> [] in
+      Hashtbl.replace tbl sig_ (n :: prev))
+    (nodes_of_graph g);
+  tbl
+
+let oport_node = function
+  | InnerSource (n, p) -> Some (n, p)
+  | Target _ -> None
+
+let iport_node = function
+  | InnerTarget (n, p) -> Some (n, p)
+  | Source _ -> None
+
+let internal_edges_for_node g n =
+  MSet.fold
+    (fun (i, o) acc ->
+      let touches =
+        match iport_node i, oport_node o with
+        | Some (m, _), _ when m == n -> true
+        | _, Some (m, _) when m == n -> true
+        | _ -> false
+      in
+      match touches, iport_node i, oport_node o with
+      | true, Some _, Some _ -> (i, o) :: acc
+      | _ -> acc)
+    []
+    g#edges
+
+let mapped_node mapping n = Hashtbl.find_opt mapping n
+
+let scene_node_used mapping sn =
+  Hashtbl.fold (fun _ mapped found -> found || mapped == sn) mapping false
+
+let scene_edge_for_pattern_edge mapping (i, o) =
+  match i, o with
+  | InnerTarget (pn, p), InnerSource (qm, q) ->
+     begin match mapped_node mapping pn, mapped_node mapping qm with
+     | Some sn, Some sm -> Some (InnerTarget (sn, p), InnerSource (sm, q))
+     | _ -> None
+     end
+  | _ -> None
+
+let validate_mapped_internal_edges pattern scene mapping =
+  MSet.forall
+    (fun (i, o as e) ->
+      match iport_node i, oport_node o with
+      | Some _, Some _ ->
+         begin match scene_edge_for_pattern_edge mapping e with
+         | Some scene_e -> MSet.mem scene_e scene#edges
+         | None -> false
+         end
+      | _ -> true)
+    pattern#edges
+
+let propagate_mapping pattern scene mapping pn sn =
+  if not (compatible_nodes pn sn) then false
+  else
+    let rec assign pn sn =
+      match mapped_node mapping pn with
+      | Some existing -> existing == sn
+      | None ->
+         if scene_node_used mapping sn then false
+         else if not (compatible_nodes pn sn) then false
+         else begin
+           Hashtbl.add mapping pn sn;
+           List.for_all check_edge (internal_edges_for_node pattern pn)
+         end
+    and check_edge (i, o) =
+      match i, o with
+      | InnerTarget (a, ap), InnerSource (b, bp) ->
+         begin match mapped_node mapping a, mapped_node mapping b with
+         | Some sa, Some sb ->
+            MSet.mem (InnerTarget (sa, ap), InnerSource (sb, bp)) scene#edges
+         | Some sa, None ->
+            begin match scene#next_opt (InnerTarget (sa, ap)) with
+            | Some (InnerSource (sb, bp')) when bp = bp' -> assign b sb
+            | _ -> false
+            end
+         | None, Some sb ->
+            begin match scene#prev_opt (InnerSource (sb, bp)) with
+            | Some (InnerTarget (sa, ap')) when ap = ap' -> assign a sa
+            | _ -> false
+            end
+         | None, None -> true
+         end
+      | _ -> true
+    in
+    assign pn sn
+
+let copy_mapping mapping =
+  let out = Hashtbl.create (Hashtbl.length mapping) in
+  Hashtbl.iter (fun k v -> Hashtbl.add out k v) mapping;
+  out
+
+let rule_side_candidate_ids st graph_id rule_name direction pattern scene =
+  let pattern_nodes = nodes_of_graph_sorted pattern in
+  match pattern_nodes with
+  | [] -> []
+  | _ ->
+     let scene_index = index_scene_nodes scene in
+     let bucket_size n =
+       match Hashtbl.find_opt scene_index (node_signature n) with
+       | Some xs -> List.length xs
+       | None -> 0
+     in
+     let ordered_pattern_nodes =
+       List.sort
+         (fun a b ->
+           let c = compare (bucket_size a) (bucket_size b) in
+           if c <> 0 then c else compare (node_signature a) (node_signature b))
+         pattern_nodes
+     in
+     let candidates_for pn =
+       Hashtbl.find_opt scene_index (node_signature pn) |> Option.value ~default:[]
+     in
+     let rec search mapping =
+       match List.find_opt (fun pn -> mapped_node mapping pn = None) ordered_pattern_nodes with
+       | None ->
+          if not (validate_mapped_internal_edges pattern scene mapping) then []
+          else
+            let selected_ids =
+              pattern_nodes
+              |> List.filter_map (fun pn ->
+                     match mapped_node mapping pn with
+                     | Some sn -> Some (ensure_sid st sn)
+                     | None -> None)
+              |> List.sort_uniq String.compare
+            in
+            begin match safe_find_rule_match st graph_id rule_name selected_ids None with
+            | Ok m ->
+               let expected_rw = match direction with Forward -> rule_name | Backward -> "-" ^ rule_name in
+               if m.rw = expected_rw then [selected_ids] else []
+            | Error _ -> []
+            end
+       | Some pn ->
+          candidates_for pn
+          |> List.concat_map (fun sn ->
+                 let next_mapping = copy_mapping mapping in
+                 if propagate_mapping pattern scene next_mapping pn sn
+                 then search next_mapping
+                 else [])
+     in
+     search (Hashtbl.create (List.length pattern_nodes * 2))
+
+let candidate_key c =
+  Printf.sprintf "%s|%s|%s|%s"
+    c.candidate_rule_name
+    c.candidate_graph_id
+    (String.concat "," c.candidate_selected_ids)
+    (match c.candidate_direction with Forward -> "forward" | Backward -> "backward")
+
+let rule_candidates st rule_name =
+  match List.assoc_opt rule_name (hyps st) with
+  | None -> []
+  | Some (lhs_rule, rhs_rule) ->
+     let seen = Hashtbl.create 31 in
+     let add graph_id direction selected_ids acc =
+       let c = { candidate_rule_name = rule_name; candidate_graph_id = graph_id; candidate_selected_ids = selected_ids; candidate_direction = direction } in
+       let key = candidate_key c in
+       if Hashtbl.mem seen key then acc
+       else begin Hashtbl.add seen key (); c :: acc end
+     in
+     ["lhs", st.lhs; "rhs", st.rhs]
+     |> List.fold_left
+          (fun acc (graph_id, scene_graph) ->
+            let forward =
+              rule_side_candidate_ids st graph_id rule_name Forward lhs_rule scene_graph
+            in
+            let backward =
+              rule_side_candidate_ids st graph_id rule_name Backward rhs_rule scene_graph
+            in
+            let acc = List.fold_left (fun a ids -> add graph_id Forward ids a) acc forward in
+            List.fold_left (fun a ids -> add graph_id Backward ids a) acc backward)
+          []
+     |> List.rev
+
 let evaluate_selection st graph_id selected_ids polygon_opt debug =
   List.map (fun name ->
       ignore polygon_opt;
@@ -900,6 +1112,18 @@ let evaluate_selection_js (selection: Js.Unsafe.any Js.t) =
   let selected_ids = Js.to_array selected |> Array.to_list |> List.map Js.to_string in
   arr (evaluate_selection !state_ref graph_id selected_ids polygon debug)
 
+let rule_candidate_obj c =
+  obj [
+    "ruleName", Js.Unsafe.inject (js_str c.candidate_rule_name);
+    "graphId", Js.Unsafe.inject (js_str c.candidate_graph_id);
+    "selectedNodeIds", Js.Unsafe.inject (arr (List.map js_str c.candidate_selected_ids));
+    "direction", Js.Unsafe.inject (js_str (match c.candidate_direction with Forward -> "forward" | Backward -> "backward"))
+  ]
+
+let rule_candidates_js name_js =
+  let name = Js.to_string name_js in
+  arr (List.map rule_candidate_obj (rule_candidates !state_ref name))
+
 let apply_rule_js name_js selection =
   let name = Js.to_string name_js in
   let graph_id =
@@ -980,6 +1204,7 @@ let _ =
          "tutorial_demo", Js.Unsafe.inject (Js.wrap_callback tutorial_demo);
          "get_scene", Js.Unsafe.inject (Js.wrap_callback get_scene);
          "evaluate_selection", Js.Unsafe.inject (Js.wrap_callback evaluate_selection_js);
+         "rule_candidates", Js.Unsafe.inject (Js.wrap_callback rule_candidates_js);
          "apply_rule", Js.Unsafe.inject (Js.wrap_callback apply_rule_js);
          "undo", Js.Unsafe.inject (Js.wrap_callback undo);
          "redo", Js.Unsafe.inject (Js.wrap_callback redo);

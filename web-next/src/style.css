@@ -222,6 +222,12 @@ button {
   border-radius: 999px;
 }
 
+.expert-toggle[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .tut-caption {
   position: absolute;
   z-index: 30;
@@ -759,6 +765,16 @@ body.tut-on .stage::after {
   border-color: var(--accent);
   background: var(--hot-bg);
   box-shadow: 0 4px 18px rgba(59, 115, 196, 0.14);
+}
+
+.rule[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--hot-bg);
+  box-shadow: 0 0 0 2px rgba(59, 115, 196, 0.16);
+}
+
+.rule[data-active="true"] .rule-badge {
+  background: var(--accent);
 }
 
 .rule:active:not([disabled]) {

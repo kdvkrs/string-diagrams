@@ -2,7 +2,7 @@ import './style.css';
 import { OcamlAdapter } from './engine/ocamlAdapter';
 import { type LayoutGraph, type LayoutNode, type LayoutPoint } from './layout/layoutTypes';
 import { animateSceneGraphLayout, layoutSceneGraph, type LayoutSeed } from './layout/physicsLayout';
-import type { PuzzleInfo, RuleAvailability, SceneState, SelectionDescriptor } from './model/interop';
+import type { PuzzleInfo, RuleAvailability, RuleCandidate, SceneState, SelectionDescriptor } from './model/interop';
 import { perf } from './perf';
 import {
   type Point,
@@ -35,6 +35,10 @@ type LayoutState = {
   graphs: Map<string, LayoutGraph>;
   rules: Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>;
 };
+type ActiveRuleMatchSet = {
+  ruleName: string;
+  candidates: RuleCandidate[];
+} | null;
 
 const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
 const ASSIST_STAGE_SELECTOR = '.stage';
@@ -157,6 +161,7 @@ app.innerHTML = `
       <button class="btn icon-btn" data-action="redo" aria-label="${t.redo}">
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3"/></svg>
       </button>
+      <button class="btn expert-toggle" data-action="expert-toggle" type="button" aria-pressed="false">Expert</button>
     </div>
     <div class="hint" id="subtitle">
       <span class="dot"></span>
@@ -365,13 +370,14 @@ const levelActions = document.querySelector<HTMLSelectElement>('#level-actions')
 const localeActions = document.querySelector<HTMLSelectElement>('#locale-actions');
 const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
+const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="expert-toggle"]');
 if (
   !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel ||
   !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
   !perfPanel || !perfOutput ||
-  !levelActions || !localeActions || !rulesShell || !rulesContainer
+  !levelActions || !localeActions || !rulesShell || !rulesContainer || !expertToggle
 ) {
   throw new Error('Missing required UI element');
 }
@@ -417,6 +423,8 @@ const emptySelection = (): SelectionDescriptor => ({
 });
 
 let currentSelection: SelectionDescriptor = emptySelection();
+let expertMode = false;
+let activeRuleMatches: ActiveRuleMatchSet = null;
 let lasso: Point[] = [];
 let dragging = false;
 let zoom = 1;
@@ -535,6 +543,11 @@ const stopAssist = () => {
 
 const invalidateRuleDock = () => {
   renderedRulesKey = '';
+};
+
+const clearActiveRuleMatches = () => {
+  activeRuleMatches = null;
+  invalidateRuleDock();
 };
 
 const nextPuzzleId = () => {
@@ -1559,6 +1572,7 @@ const setScene = (nextScene: SceneState) => {
   scene = localizeScene(nextScene);
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
+  activeRuleMatches = null;
   invalidateRuleDock();
   void layoutScene(scene);
 };
@@ -1684,13 +1698,18 @@ const strokeSmoothPolyline = (c: CanvasRenderingContext2D, points: Point[]) => {
   c.stroke();
 };
 
-const drawNode = (c: CanvasRenderingContext2D, node: LayoutNode, view: View, selected: Set<string>, preview = false) => {
+const screenNodeRect = (node: LayoutNode, view: View, preview = false): Rect => {
   const center = toScreen({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }, view);
   const minW = node.boundary ? (preview ? 4 : 8) : (preview ? 5 : 22);
   const minH = node.boundary ? (preview ? 4 : 8) : (preview ? 5 : 18);
   const w = Math.max(minW, node.w * view.scale * (preview ? 0.78 : 1));
   const h = Math.max(minH, node.h * view.scale * (preview ? 0.78 : 1));
-  const p = { x: center.x - w * 0.5, y: center.y - h * 0.5 };
+  return { x: center.x - w * 0.5, y: center.y - h * 0.5, w, h };
+};
+
+const drawNode = (c: CanvasRenderingContext2D, node: LayoutNode, view: View, selected: Set<string>, preview = false) => {
+  const p = screenNodeRect(node, view, preview);
+  const { w, h } = p;
   if (node.boundary) {
     c.fillStyle = cssVar('--pin', '#9aa8b8');
     c.beginPath();
@@ -1860,6 +1879,54 @@ const lassoPathForSelection = (selection: SelectionDescriptor, panel: Rect, layo
   ];
 };
 
+const candidateRect = (candidate: RuleCandidate, panels: PanelMap): Rect | null => {
+  const layout = layouts?.graphs.get(candidate.graphId);
+  if (!layout) return null;
+  const view = viewForLayout(layout, panels[candidate.graphId]);
+  const selected = new Set(candidate.selectedNodeIds);
+  const nodes = layout.nodes.filter((node) => selected.has(node.id) && !node.boundary);
+  if (nodes.length === 0) return null;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  nodes.forEach((node) => {
+    const r = screenNodeRect(node, view);
+    xs.push(r.x, r.x + r.w);
+    ys.push(r.y, r.y + r.h);
+  });
+  const pad = 18;
+  const panel = panels[candidate.graphId];
+  const x0 = Math.max(panel.x + 8, Math.min(...xs) - pad);
+  const x1 = Math.min(panel.x + panel.w - 8, Math.max(...xs) + pad);
+  const y0 = Math.max(panel.y + 8, Math.min(...ys) - pad);
+  const y1 = Math.min(panel.y + panel.h - 8, Math.max(...ys) + pad);
+  return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+};
+
+const pickCandidateAt = (p: Point, panels: PanelMap): RuleCandidate | null => {
+  if (!activeRuleMatches) return null;
+  return activeRuleMatches.candidates
+    .map((candidate) => ({ candidate, rect: candidateRect(candidate, panels) }))
+    .filter((entry): entry is { candidate: RuleCandidate; rect: Rect } => Boolean(entry.rect && inPanel(p, entry.rect)))
+    .sort((a, b) => (a.rect.w * a.rect.h) - (b.rect.w * b.rect.h))[0]?.candidate ?? null;
+};
+
+const drawCandidateHighlights = (panels: PanelMap) => {
+  if (!activeRuleMatches) return;
+  ctx.save();
+  activeRuleMatches.candidates.forEach((candidate) => {
+    const rect = candidateRect(candidate, panels);
+    if (!rect) return;
+    ctx.fillStyle = candidate.direction === 'forward' ? 'rgba(59, 115, 196, 0.14)' : 'rgba(111, 168, 106, 0.16)';
+    ctx.strokeStyle = candidate.direction === 'forward' ? '#3b73c4' : '#5b9a55';
+    ctx.lineWidth = 2.4;
+    ctx.setLineDash([7, 5]);
+    roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 12);
+    ctx.fill();
+    ctx.stroke();
+  });
+  ctx.restore();
+};
+
 const pointInPolygon = (p: Point, poly: Point[]) => {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -1906,6 +1973,7 @@ const pickGraphFromLasso = (panels: PanelMap): 'lhs' | 'rhs' | null => {
 };
 
 const evaluateSelection = (panels: PanelMap) => {
+  clearActiveRuleMatches();
   if (!layouts) {
     scene.messages = [t.layoutSettling];
     return;
@@ -1999,16 +2067,23 @@ const updateRuleScrollState = () => {
 const refreshUi = () => {
   const lastMessage = scene.messages[0] || scene.subtitle || t.lassoPrompt;
   const hasSelection = currentSelection.selectedNodeIds.length > 0;
+  const hasManualSelection = expertMode && hasSelection;
   const hasEnabledRule = rules.some((r) => r.enabled);
-  subtitle.textContent = hasSelection && hasEnabledRule
+  subtitle.textContent = activeRuleMatches
+    ? `${activeRuleMatches.candidates.length} matching region${activeRuleMatches.candidates.length === 1 ? '' : 's'} for ${activeRuleMatches.ruleName}.`
+    : hasManualSelection && hasEnabledRule
     ? t.selectedPiecesPrompt(currentSelection.selectedNodeIds.length)
     : lastMessage;
   if (proofOpen) proof.innerHTML = highlightRocq(currentProofText());
   renderLevelButtons();
-  rulesContainer.dataset.selection = String(hasSelection);
+  expertToggle.setAttribute('aria-pressed', String(expertMode));
+  expertToggle.dataset.active = String(expertMode);
+  rulesContainer.dataset.selection = String(hasManualSelection);
   const ruleKey = [
     activePuzzleId,
     layouts ? 'ready' : 'pending',
+    expertMode ? 'expert' : 'rule-first',
+    activeRuleMatches ? `${activeRuleMatches.ruleName}:${activeRuleMatches.candidates.length}` : 'no-active-rule',
     scene.rules.map((r) => r.name).join(','),
     rules.map((r) => `${r.name}:${r.enabled ? 1 : 0}:${r.reason ?? ''}`).join(',')
   ].join('|');
@@ -2022,16 +2097,26 @@ const refreshUi = () => {
     ...scene.rules.map((rule, idx) => {
       const name = rule.name;
       const ra = rules.find((r) => r.name === name) ?? { name, enabled: false, reason: t.unavailable };
-      const dimmed = hasSelection && !ra.enabled;
+      const dimmed = hasManualSelection && !ra.enabled;
+      const manuallyApplicable = hasManualSelection && ra.enabled;
+      const disabled = !layouts || (hasManualSelection && !ra.enabled);
+      const active = activeRuleMatches?.ruleName === name;
       const btn = document.createElement('button');
       btn.className = 'rule';
       btn.dataset.dimmed = String(dimmed);
+      btn.dataset.active = String(active);
       btn.type = 'button';
       btn.dataset.action = 'rule';
       btn.dataset.ruleName = name;
       btn.dataset.ruleKey = `R${idx + 1}`;
-      btn.disabled = !ra.enabled;
-      btn.title = ra.enabled ? t.applyRule(name) : t.reason(ra.reason ?? t.notApplicable);
+      btn.disabled = disabled;
+      btn.title = manuallyApplicable
+        ? t.applyRule(name)
+        : active
+          ? `${activeRuleMatches?.candidates.length ?? 0} matching regions`
+          : layouts
+            ? `Find matching regions for ${name}`
+            : t.layoutLoading;
       btn.innerHTML = `
         <div class="rule-meta"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
         <div class="rule-preview" aria-hidden="true"></div>
@@ -2085,6 +2170,7 @@ const render = (refresh = true) => {
   else drawPendingGraph(panels.lhs);
   if (rhs && rhsView) drawLayoutGraph(rhs, panels.rhs, selectedRhs, rhsView);
   else drawPendingGraph(panels.rhs);
+  drawCandidateHighlights(panels);
   debugCrossings = perf.debugCrossings
     ? perf.time('debug.crossings', () => [
         ...(lhs && lhsView ? crossingDiagnosticsForGraph(lhs, lhsView) : []),
@@ -2178,13 +2264,25 @@ const clearSelection = () => {
   lasso = [];
   currentSelection = emptySelection();
   rules = disabledRulesFor(scene, t.selectSubDiagram);
+  clearActiveRuleMatches();
   hideSelectionFeedback();
 };
 
-const applyRuleFromButton = async (btn: HTMLButtonElement) => {
-  const name = btn.dataset.ruleName ?? '';
-  if (!name || btn.disabled) return;
-  const selection = { ...currentSelection, selectedNodeIds: [...currentSelection.selectedNodeIds] };
+const clearManualSelection = () => {
+  lasso = [];
+  currentSelection = emptySelection();
+  rules = disabledRulesFor(scene, t.selectSubDiagram);
+};
+
+const selectionFromCandidate = (candidate: RuleCandidate): SelectionDescriptor => ({
+  graphId: candidate.graphId,
+  selectedNodeIds: [...candidate.selectedNodeIds],
+  polygon: [],
+  cuts: [],
+  cycleOrder: []
+});
+
+const applyRuleToSelection = async (name: string, selection: SelectionDescriptor) => {
   const seed = seedFromCurrentLayout(selection);
   const collapseCenter = layoutCenterFromCurrentSelection(selection);
   const res = perf.time('ocaml.applyRule', () => adapter.applyRule(name, selection));
@@ -2201,16 +2299,71 @@ const applyRuleFromButton = async (btn: HTMLButtonElement) => {
   }
 };
 
+const activateRuleCandidates = (name: string) => {
+  if (!layouts) {
+    scene.messages = [t.layoutSettling];
+    render();
+    return;
+  }
+  clearManualSelection();
+  const candidates = perf.time('ocaml.ruleCandidates', () => adapter.ruleCandidates(name));
+  if (candidates.length === 0) {
+    activeRuleMatches = null;
+    scene.messages = [t.ruleNotApplicable(name)];
+    showSelectionFeedback(t.noRulesMatchFeedback);
+  } else {
+    activeRuleMatches = { ruleName: name, candidates };
+    scene.messages = [`${candidates.length} matching region${candidates.length === 1 ? '' : 's'} for ${name}.`];
+    hideSelectionFeedback();
+  }
+  invalidateRuleDock();
+  render();
+};
+
+const applyCandidate = async (candidate: RuleCandidate) => {
+  if (!activeRuleMatches) return;
+  await applyRuleToSelection(activeRuleMatches.ruleName, selectionFromCandidate(candidate));
+};
+
+const applyRuleFromButton = async (btn: HTMLButtonElement) => {
+  const name = btn.dataset.ruleName ?? '';
+  if (!name || btn.disabled) return;
+  if (expertMode && currentSelection.selectedNodeIds.length > 0) {
+    const selection = { ...currentSelection, selectedNodeIds: [...currentSelection.selectedNodeIds] };
+    await applyRuleToSelection(name, selection);
+    return;
+  }
+  activateRuleCandidates(name);
+};
+
 if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent !== 'undefined') {
   canvas.addEventListener('pointerdown', (e: PointerEvent) => {
     canvas.setPointerCapture(e.pointerId);
-    startDrag(canvasPoint(e.clientX, e.clientY));
+    const p = canvasPoint(e.clientX, e.clientY);
+    if (!expertMode) {
+      const rect = canvas.getBoundingClientRect();
+      const panels = panelsForSize(Math.max(1, Math.floor(rect.width)), Math.max(1, Math.floor(rect.height)));
+      const candidate = pickCandidateAt(p, panels);
+      if (candidate) void applyCandidate(candidate);
+      return;
+    }
+    startDrag(p);
   });
   canvas.addEventListener('pointermove', (e: PointerEvent) => moveDrag(canvasPoint(e.clientX, e.clientY)));
   canvas.addEventListener('pointerup', (e: PointerEvent) => finishDrag(canvasPoint(e.clientX, e.clientY)));
   canvas.addEventListener('pointercancel', cancelDrag);
 } else {
-  canvas.addEventListener('mousedown', (e: MouseEvent) => startDrag(canvasPoint(e.clientX, e.clientY)));
+  canvas.addEventListener('mousedown', (e: MouseEvent) => {
+    const p = canvasPoint(e.clientX, e.clientY);
+    if (!expertMode) {
+      const rect = canvas.getBoundingClientRect();
+      const panels = panelsForSize(Math.max(1, Math.floor(rect.width)), Math.max(1, Math.floor(rect.height)));
+      const candidate = pickCandidateAt(p, panels);
+      if (candidate) void applyCandidate(candidate);
+      return;
+    }
+    startDrag(p);
+  });
   window.addEventListener('mousemove', (e: MouseEvent) => moveDrag(canvasPoint(e.clientX, e.clientY)));
   window.addEventListener('mouseup', (e: MouseEvent) => finishDrag(canvasPoint(e.clientX, e.clientY)));
   canvas.addEventListener(
@@ -2218,7 +2371,16 @@ if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).Pointer
     (e: TouchEvent) => {
       if (e.touches.length < 1) return;
       const t = e.touches[0];
-      startDrag(canvasPoint(t.clientX, t.clientY));
+      const p = canvasPoint(t.clientX, t.clientY);
+      if (!expertMode) {
+        const rect = canvas.getBoundingClientRect();
+        const panels = panelsForSize(Math.max(1, Math.floor(rect.width)), Math.max(1, Math.floor(rect.height)));
+        const candidate = pickCandidateAt(p, panels);
+        if (candidate) void applyCandidate(candidate);
+        e.preventDefault();
+        return;
+      }
+      startDrag(p);
       e.preventDefault();
     },
     { passive: false }
@@ -2297,6 +2459,12 @@ document.addEventListener('click', (e) => {
     releaseLayoutStep();
     clearSelection();
     setScene(adapter.redo());
+    render();
+  } else if (action === 'expert-toggle') {
+    expertMode = !expertMode;
+    if (!expertMode) clearManualSelection();
+    else clearActiveRuleMatches();
+    hideSelectionFeedback();
     render();
   } else if (action === 'rule' && actionEl instanceof HTMLButtonElement) {
     applyRuleFromButton(actionEl);

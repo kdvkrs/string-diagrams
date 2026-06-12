@@ -91,6 +91,13 @@ export type RuleAvailability = {
   reason?: string;
 };
 
+export type RuleCandidate = {
+  ruleName: RuleName;
+  graphId: 'lhs' | 'rhs';
+  selectedNodeIds: string[];
+  direction: 'forward' | 'backward';
+};
+
 export type ApplyResult = {
   ok: boolean;
   scene?: SceneState;

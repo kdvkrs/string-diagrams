@@ -1,6 +1,7 @@
 import type {
   ApplyResult,
   PuzzleInfo,
+  RuleCandidate,
   RuleAvailability,
   SceneGraph,
   SceneState,
@@ -14,6 +15,7 @@ type BridgeApi = {
   tutorial_demo?: (name: string) => unknown;
   get_scene: () => unknown;
   evaluate_selection: (selection: unknown) => unknown;
+  rule_candidates?: (ruleName: string) => unknown;
   apply_rule: (ruleName: string, selection: unknown) => unknown;
   undo: () => unknown;
   redo: () => unknown;
@@ -144,6 +146,21 @@ const toRuleAvailability = (raw: unknown): RuleAvailability[] => {
   }));
 };
 
+const toRuleCandidate = (raw: unknown): RuleCandidate => {
+  const x = (raw ?? {}) as Record<string, unknown>;
+  const graphId = asString(x.graphId) === 'rhs' ? 'rhs' : 'lhs';
+  const direction = asString(x.direction) === 'backward' ? 'backward' : 'forward';
+  return {
+    ruleName: asString(x.ruleName),
+    graphId,
+    selectedNodeIds: asArray<unknown>(x.selectedNodeIds).map(asString).filter(Boolean),
+    direction
+  };
+};
+
+const toRuleCandidates = (raw: unknown): RuleCandidate[] =>
+  asArray<unknown>(raw).map(toRuleCandidate).filter((c) => c.ruleName && c.selectedNodeIds.length > 0);
+
 const toApplyResult = (raw: unknown): ApplyResult => {
   const x = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -229,6 +246,11 @@ export class OcamlAdapter {
 
   evaluateSelection(selection: SelectionDescriptor): RuleAvailability[] {
     return toRuleAvailability(this.bridge.evaluate_selection(selection));
+  }
+
+  ruleCandidates(ruleName: string): RuleCandidate[] {
+    if (!this.bridge.rule_candidates) return [];
+    return toRuleCandidates(this.bridge.rule_candidates(ruleName));
   }
 
   applyRule(ruleName: string, selection: SelectionDescriptor): ApplyResult {
