@@ -8,7 +8,6 @@ import {
   type Point,
   type Rect,
   type View,
-  viewForLayoutScale,
   toScreen,
   rulePreviewSvg as rulePreviewSvgBase,
 } from './diagramSvg';
@@ -1126,11 +1125,7 @@ const assistEllipseForSelection = (selection: SelectionDescriptor): Rect | null 
   const nodes = graph.nodes.filter((node) => selected.has(node.id) && !node.boundary);
   if (nodes.length === 0) return null;
   const { canvasRect, panel } = graphPanelForPageRect(graphId);
-  const panels = panelsForSize(canvasRect.width, canvasRect.height);
-  const lhs = layouts?.graphs.get('lhs');
-  const rhs = layouts?.graphs.get('rhs');
-  const sharedScale = lhs && rhs ? sharedViewScale([lhs, rhs], panels.lhs) : undefined;
-  const view = sharedScale ? viewForLayoutScale(graph, panel, sharedScale) : viewForLayout(graph, panel);
+  const view = viewForLayout(graph, panel);
   // Match the canvas renderer: convert the selected node bounds from layout
   // space through the current graph view, then into page coordinates.
   const xs: number[] = [];
@@ -1595,14 +1590,6 @@ const viewForLayout = (g: LayoutGraph, panel: Rect, zoomFactor = zoom): View => 
     ty: panel.y + panel.h * 0.5 - (g.height * 0.5) * scale
   };
 };
-
-const sharedViewScale = (graphs: LayoutGraph[], panel: Rect) => {
-  const pad = 18;
-  const w = Math.max(1, ...graphs.map((g) => g.width + pad * 2));
-  const h = Math.max(1, ...graphs.map((g) => g.height + pad * 2));
-  return Math.max(0.05, Math.min(panel.w / w, panel.h / h)) * zoom;
-};
-
 
 const inPanel = (p: Point, r: Rect) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
@@ -2169,9 +2156,8 @@ const render = (refresh = true) => {
   const selectedRhs = new Set(currentSelection.graphId === 'rhs' ? currentSelection.selectedNodeIds : []);
   const lhs = layouts?.graphs.get('lhs');
   const rhs = layouts?.graphs.get('rhs');
-  const sharedScale = lhs && rhs ? sharedViewScale([lhs, rhs], panels.lhs) : undefined;
-  const lhsView = lhs ? (sharedScale ? viewForLayoutScale(lhs, panels.lhs, sharedScale) : viewForLayout(lhs, panels.lhs)) : undefined;
-  const rhsView = rhs ? (sharedScale ? viewForLayoutScale(rhs, panels.rhs, sharedScale) : viewForLayout(rhs, panels.rhs)) : undefined;
+  const lhsView = lhs ? viewForLayout(lhs, panels.lhs) : undefined;
+  const rhsView = rhs ? viewForLayout(rhs, panels.rhs) : undefined;
   if (lhs && lhsView) drawLayoutGraph(lhs, panels.lhs, selectedLhs, lhsView);
   else drawPendingGraph(panels.lhs);
   if (rhs && rhsView) drawLayoutGraph(rhs, panels.rhs, selectedRhs, rhsView);
