@@ -3,7 +3,7 @@ import type { LayoutGraph, LayoutNode, LayoutPoint } from './layout/layoutTypes'
 export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
 export type View = { scale: number; tx: number; ty: number };
-export type SvgOpts = { pinColor?: string; showLabels?: boolean; transparent?: boolean };
+export type SvgOpts = { pinColor?: string; showLabels?: boolean; transparent?: boolean; nodeScale?: number };
 
 export const viewForLayoutScale = (g: LayoutGraph, panel: Rect, scale: number): View => ({
   scale,
@@ -124,12 +124,13 @@ const svgSmoothPath = (points: Point[]) => {
 };
 
 const svgNode = (node: LayoutNode, view: View, opts: SvgOpts = {}) => {
-  const { pinColor = '#9aa8b8', showLabels = false } = opts;
+  const { pinColor = '#9aa8b8', showLabels = false, nodeScale = 1 } = opts;
   const center = toScreen({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }, view);
   const minW = node.boundary ? 3 : Math.max(5, view.scale * 7);
   const minH = node.boundary ? 3 : Math.max(5, view.scale * 7);
-  const w = Math.max(minW, node.w * view.scale * 0.9);
-  const h = Math.max(minH, node.h * view.scale * 0.9);
+  const scale = node.boundary ? 1 : nodeScale;
+  const w = Math.max(minW, node.w * view.scale * 0.9) * scale;
+  const h = Math.max(minH, node.h * view.scale * 0.9) * scale;
   const x = center.x - w * 0.5;
   const y = center.y - h * 0.5;
   if (node.boundary) {
@@ -191,11 +192,12 @@ export const rulePreviewSvg = (rule: { lhs: LayoutGraph; rhs: LayoutGraph }, wid
   const sideW = (width - gutter - pad * 2) * 0.5;
   const left: Rect = { x: pad, y: pad + verticalInset, w: sideW, h: height - pad * 2 - verticalInset * 2 };
   const right: Rect = { x: pad + sideW + gutter, y: pad + verticalInset, w: sideW, h: height - pad * 2 - verticalInset * 2 };
+  const previewOpts: SvgOpts = { ...opts, nodeScale: (opts?.nodeScale ?? 1) * 1.5 };
   return `
     <svg class="rule-preview-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="rewrite rule preview" xmlns="http://www.w3.org/2000/svg">
       ${opts?.transparent ? '' : `<rect width="${width}" height="${height}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />`}
-      ${svgGraphPreview(rule.lhs, left, opts)}
-      ${svgGraphPreview(rule.rhs, right, opts)}
+      ${svgGraphPreview(rule.lhs, left, previewOpts)}
+      ${svgGraphPreview(rule.rhs, right, previewOpts)}
       <text x="${width * 0.5}" y="${height * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#47607a" font-family="Avenir Next, sans-serif" font-size="24" font-weight="900">=</text>
     </svg>
   `;

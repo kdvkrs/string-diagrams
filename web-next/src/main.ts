@@ -454,6 +454,7 @@ let debugCrossings: CrossingDiagnostic[] = [];
 // increase it if the lasso feels too tight around the highlighted rewrite.
 const TUTORIAL_LASSO_PAD = 16;
 const ASSIST_LASSO_DURATION_MS = 4800;
+const SHOW_NODE_LABELS = false;
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
@@ -650,7 +651,13 @@ const fireConfetti = (finale = false) => {
   confettiCanvas.style.width = `${width}px`;
   confettiCanvas.style.height = `${height}px`;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const colors = [cssVar('--accent', '#3b73c4'), cssVar('--node-x', '#6fa86a'), cssVar('--strand-b', '#6e3a5e'), cssVar('--strand-a', '#2f7a6e')];
+  const colors = [
+    cssVar('--accent', '#3b73c4'),
+    cssVar('--strand-a', '#0072b2'),
+    cssVar('--strand-b', '#d55e00'),
+    cssVar('--node-o', '#f0e442'),
+    cssVar('--node-x', '#009e73')
+  ];
   const duration = finale ? 9000 : 4200;
   const started = Date.now();
   let lastBurst = 0;
@@ -1736,7 +1743,7 @@ const drawNode = (c: CanvasRenderingContext2D, node: LayoutNode, view: View, sel
   }
   c.fill();
   c.stroke();
-  if (!preview) {
+  if (!preview && SHOW_NODE_LABELS) {
     c.fillStyle = '#ffffff';
     c.font = '700 12px Menlo, Consolas, monospace';
     c.textAlign = 'center';

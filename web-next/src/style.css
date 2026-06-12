@@ -11,11 +11,12 @@
   --ink-soft: #47607a;
   --accent: #3b73c4;
   --hot-bg: #eef4fc;
-  --strand-a: #2f7a6e;
-  --strand-b: #6e3a5e;
-  --node-x: #6fa86a;
-  --node-n: #2f7a6e;
-  --node-m: #6e3a5e;
+  --strand-a: #0072b2;
+  --strand-b: #d55e00;
+  --node-x: #009e73;
+  --node-n: #d55e00;
+  --node-m: #0072b2;
+  --node-o: #f0e442;
   --pin: #9aa8b8;
   --font: "Avenir Next", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
   --radius: 14px;

@@ -42,11 +42,12 @@ let gray = Color.gray 0.5
 let alpha s c = Color.with_a c s
 let color = function
   | "red"    -> red
-  | "green"  -> Color.v 0.1 0.8 0.1 1.
-  | "blue"   -> Color.v 0.1 0.1 0.8 1.
-  | "yellow" -> Color.v 0.8 0.8 0.0 1.
+  | "green"  -> Color.v 0.0 0.62 0.45 1.
+  | "blue"   -> Color.v 0.0 0.45 0.70 1.
+  | "yellow" -> Color.v 0.94 0.89 0.26 1.
   | "lblue"  -> Color.v 0.4 0.8 0.8 1.
   | "orange" -> Color.v 1.0 0.4 0.0 1.
+  | "vermillion" -> Color.v 0.84 0.37 0.0 1.
   | "violet" -> Color.v 0.4 0.1 0.4 1.
   | "turquoise" -> Color.v 0.0 0.4 0.4 1.
   | "rose"   -> Color.v 1.0 0.4 1.0 1.
@@ -81,19 +82,19 @@ let id_color name =
        | 'b' -> "orange"
        | 'c' -> "red"
        | 'd' -> "violet"
-       | 'e' -> "turquoise" (* "green" *)
-       | 'f' -> "violet" (* "lblue" *)
+       | 'e' -> "blue"
+       | 'f' -> "vermillion"
        | 'g' -> "violet" (* "blue" *)
        | 'h' -> "turquoise"
        | 'i' -> "purple"
        | 'j' -> "rose"
        | 'k' -> "cacadoie"
-       | 'm' -> "turquoise" (* "red" *)
-       | 'n' -> "violet" (* "blue" *)
-       | 'o' -> "orange" (* violet *)
-       | 'x' -> "cacadoie"
-       | 'y' -> "cacadoie"
-       | 'z' -> "cacadoie"
+       | 'm' -> "blue"
+       | 'n' -> "vermillion"
+       | 'o' -> "yellow"
+       | 'x' -> "green"
+       | 'y' -> "green"
+       | 'z' -> "green"
        | _   -> "gray"
     )
 
