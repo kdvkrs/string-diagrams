@@ -1865,10 +1865,9 @@ const lassoPathForSelection = (selection: SelectionDescriptor, panel: Rect, layo
   const xs: number[] = [];
   const ys: number[] = [];
   selectedNodes.forEach((node) => {
-    const a = toScreen({ x: node.x, y: node.y }, view);
-    const b = toScreen({ x: node.x + node.w, y: node.y + node.h }, view);
-    xs.push(a.x, b.x);
-    ys.push(a.y, b.y);
+    const r = screenNodeRect(node, view);
+    xs.push(r.x, r.x + r.w);
+    ys.push(r.y, r.y + r.h);
   });
   if (xs.length === 0) return [];
   const pad = TUTORIAL_LASSO_PAD;
