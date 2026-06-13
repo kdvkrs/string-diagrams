@@ -37,20 +37,20 @@ const fallbackPuzzles: PuzzleInfo[] = [
   {
     id: 'clean-up-two-units',
     level: 'Level 1',
-    title: 'Level 1: Clean Up Two Units',
-    subtitle: 'A unit wire followed by multiplication disappears. I’ll do the first cleanup; you do the second.'
+    title: 'Level 1: Fork Reassociation',
+    subtitle: 'Use the same fork reassociation move twice. I’ll guide the first one; you finish the second.'
   },
   {
     id: 'composite-monad-left-unit',
     level: 'Level 2',
-    title: 'Level 2: Composite Left Unit',
-    subtitle: 'Create an M-wire and an N-wire, cross N past M, then clean up both units.'
+    title: 'Level 2: Push Through Crossing',
+    subtitle: 'Push a fork through one crossing, then do it again.'
   },
   {
     id: 'both-sides-meet',
     level: 'Level 3',
-    title: 'Level 3: Make Both Sides Meet',
-    subtitle: 'Rewrite both diagrams toward the same middle shape, rather than pushing only one side across.'
+    title: 'Level 3: Expose the Crossing',
+    subtitle: 'First reassociate the fork, then push it through the crossing that appears.'
   },
   {
     id: 'composite-monad-associativity',

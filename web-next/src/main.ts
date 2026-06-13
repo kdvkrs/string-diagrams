@@ -444,6 +444,94 @@ const disabledRulesFor = (s: SceneState, reason = t.reason('No selection')): Rul
   s.rules.map((rule) => ({ name: rule.name, enabled: false, reason }));
 let rules: RuleAvailability[] = disabledRulesFor(scene);
 
+const DEBUG_LEVEL_TRACE = true;
+const DEBUG_LEVEL_PREFIX = '[DEBUG-sd-levels]';
+
+const debugGraphSnapshot = (graph: SceneGraph) => ({
+  id: graph.id,
+  sources: graph.sources,
+  targets: graph.targets,
+  nodeCount: graph.nodes.length,
+  edgeCount: graph.edges.length,
+  nodes: graph.nodes.map((node) => ({
+    id: node.id,
+    label: node.label,
+    kind: node.kind,
+    shape: node.visual.shape ?? '',
+    nsources: node.nsources,
+    ntargets: node.ntargets
+  }))
+});
+
+const debugLayoutSnapshot = (graph: LayoutGraph | undefined) => {
+  if (!graph) return null;
+  const nodes = graph.nodes.filter((node) => !node.boundary);
+  const xs = nodes.flatMap((node) => [node.x, node.x + node.w]);
+  const ys = nodes.flatMap((node) => [node.y, node.y + node.h]);
+  return {
+    id: graph.id,
+    width: graph.width,
+    height: graph.height,
+    nodeCount: nodes.length,
+    bounds: xs.length === 0 ? null : {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys)
+    },
+    nodes: nodes.map((node) => ({
+      id: node.id,
+      label: node.label,
+      x: Math.round(node.x * 10) / 10,
+      y: Math.round(node.y * 10) / 10,
+      modelX: node.modelX === undefined ? undefined : Math.round(node.modelX * 10) / 10,
+      modelY: node.modelY === undefined ? undefined : Math.round(node.modelY * 10) / 10
+    }))
+  };
+};
+
+const debugSceneSnapshot = (s: SceneState) => ({
+  puzzleId: s.puzzleId,
+  level: s.level,
+  title: s.title,
+  rules: s.rules.map((rule) => rule.name),
+  messages: s.messages,
+  graphs: s.graphs.map(debugGraphSnapshot)
+});
+
+const debugSelectionSnapshot = (selection: SelectionDescriptor) => ({
+  graphId: selection.graphId,
+  selectedNodeIds: [...selection.selectedNodeIds],
+  polygonPoints: selection.polygon.length,
+  cuts: selection.cuts.length
+});
+
+const debugRuleCandidateSnapshot = (ruleNames: string[]) => {
+  const names = [...new Set(ruleNames)];
+  return names.map((ruleName) => {
+    try {
+      return {
+        ruleName,
+        candidates: adapter.ruleCandidates(ruleName).map((candidate) => ({
+          graphId: candidate.graphId,
+          direction: candidate.direction,
+          selectedNodeIds: candidate.selectedNodeIds
+        }))
+      };
+    } catch (error) {
+      return {
+        ruleName,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  });
+};
+
+const debugTrace = (event: string, payload: Record<string, unknown>) => {
+  if (!DEBUG_LEVEL_TRACE) return;
+  console.log(DEBUG_LEVEL_PREFIX, event, payload);
+};
+
 const emptySelection = (): SelectionDescriptor => ({
   graphId: 'lhs',
   selectedNodeIds: [],
@@ -1528,6 +1616,14 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
   const epoch = ++layoutEpoch;
   const localizedNextScene = localizeScene(nextScene);
   const finalMessages = [...localizedNextScene.messages];
+  debugTrace('animateRewriteScene:start', {
+    graphId,
+    selectedNodeIds: [...selectedNodeIds],
+    collapseCenter,
+    stableSeedNodeIds: [...(seed?.nodePositions?.keys() ?? [])],
+    incomingScene: debugSceneSnapshot(localizedNextScene),
+    layoutBefore: debugLayoutSnapshot(layouts?.graphs.get(graphId))
+  });
   scene = localizedNextScene;
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
@@ -1587,6 +1683,10 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
       );
       if (epoch !== layoutEpoch) return;
       nextGraphs.set(graphId, finalLayout);
+      debugTrace('animateRewriteScene:final-layout', {
+        graphId,
+        finalLayout: debugLayoutSnapshot(finalLayout)
+      });
     }
     scene.messages = finalMessages.length > 0 ? finalMessages : [t.rewriteReplayFinished];
   } catch (error) {
@@ -1596,6 +1696,12 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
     void layoutScene(localizedNextScene);
   } finally {
     if (epoch === layoutEpoch) {
+      debugTrace('animateRewriteScene:finish', {
+        graphId,
+        messages: scene.messages,
+        layouts: scene.graphs.map((graph) => debugLayoutSnapshot(layouts?.graphs.get(graph.id))),
+        candidates: debugRuleCandidateSnapshot(scene.rules.map((rule) => rule.name))
+      });
       render();
     }
   }
@@ -2026,6 +2132,15 @@ const evaluateSelection = (panels: PanelMap) => {
     debug: perf.debugSelection
   };
   rules = perf.time('ocaml.evaluateSelection', () => adapter.evaluateSelection(currentSelection));
+  debugTrace('evaluateSelection', {
+    selection: debugSelectionSnapshot(currentSelection),
+    selectedLabels: layout.nodes
+      .filter((node) => selected.includes(node.id))
+      .map((node) => ({ id: node.id, label: node.label, x: node.x, y: node.y })),
+    availability: rules,
+    scene: debugSceneSnapshot(scene),
+    layout: debugLayoutSnapshot(layout)
+  });
   if (!rules.some((r) => r.enabled)) {
     const why = rules.map((r) => `${r.name}: ${r.reason ? t.reason(r.reason) : t.notApplicable}`).join(' | ');
     scene.messages = [t.noRuleMatches(t.graphSide(graphId), selected.length), why];
@@ -2102,7 +2217,22 @@ const canonicalRuleKey = (rule: SceneRule) => {
   return forward < backward ? forward : backward;
 };
 
+const ruleFamilyLabel = (ruleNames: string[]) => {
+  if (ruleNames.length > 0 && ruleNames.every((name) => ['mA', 'nA', 'mm', 'nn', 'oo'].includes(name))) {
+    return 'Fork reassociation';
+  }
+  if (
+    ruleNames.length > 0 &&
+    ruleNames.every((name) => ['mx', 'nx', 'ny', 'oy', 'mz', 'oz'].includes(name))
+  ) {
+    return 'Push fork through crossing';
+  }
+  return null;
+};
+
 const simpleRuleLabel = (ruleNames: string[]) => {
+  const familyLabel = ruleFamilyLabel(ruleNames);
+  if (familyLabel) return familyLabel;
   if (ruleNames.length <= 2) return ruleNames.join('/');
   return `${ruleNames[0]} +${ruleNames.length - 1}`;
 };
@@ -2398,13 +2528,37 @@ const selectionFromCandidate = (candidate: RuleCandidate): SelectionDescriptor =
 const applyRuleToSelection = async (name: string, selection: SelectionDescriptor) => {
   const seed = seedFromCurrentLayout(selection);
   const collapseCenter = layoutCenterFromCurrentSelection(selection);
+  debugTrace('applyRuleToSelection:start', {
+    ruleName: name,
+    selection: debugSelectionSnapshot(selection),
+    sceneBefore: debugSceneSnapshot(scene),
+    candidatesBefore: debugRuleCandidateSnapshot(scene.rules.map((rule) => rule.name)),
+    layoutBefore: debugLayoutSnapshot(layouts?.graphs.get(selection.graphId)),
+    seedNodeIds: [...(seed?.nodePositions?.keys() ?? [])],
+    collapseCenter
+  });
   const res = perf.time('ocaml.applyRule', () => adapter.applyRule(name, selection));
+  debugTrace('applyRuleToSelection:result', {
+    ruleName: name,
+    ok: res.ok,
+    error: res.error,
+    proofDelta: res.proofDelta,
+    sceneAfter: res.scene ? debugSceneSnapshot(res.scene) : null,
+    candidatesAfter: res.scene ? debugRuleCandidateSnapshot(res.scene.rules.map((rule) => rule.name)) : []
+  });
   if (res.ok && res.scene) {
     bumpMoves();
     const solved = res.scene.messages.some((m) => m.includes('You just made a proof'));
     await animateSelectionCollapse(selection);
     clearSelection();
     await animateRewriteScene(res.scene, selection.graphId, seed, collapseCenter, new Set(selection.selectedNodeIds));
+    debugTrace('applyRuleToSelection:after-animation', {
+      ruleName: name,
+      selection: debugSelectionSnapshot(selection),
+      sceneAfterAnimation: debugSceneSnapshot(scene),
+      candidatesAfterAnimation: debugRuleCandidateSnapshot(scene.rules.map((rule) => rule.name)),
+      layoutAfter: debugLayoutSnapshot(layouts?.graphs.get(selection.graphId))
+    });
     if (solved) showSuccess();
   } else {
     scene.messages = [res.error ? t.reason(res.error) : t.ruleNotApplicable(name)];
@@ -2419,6 +2573,12 @@ const activateRuleCandidates = (item: { key: string; label: string; ruleNames: s
     return;
   }
   clearManualSelection();
+  debugTrace('activateRuleCandidates:start', {
+    item,
+    scene: debugSceneSnapshot(scene),
+    rawCandidates: debugRuleCandidateSnapshot(item.ruleNames),
+    layouts: scene.graphs.map((graph) => debugLayoutSnapshot(layouts?.graphs.get(graph.id)))
+  });
   const candidates = perf.time('ocaml.ruleCandidates', () => {
     const seen = new Set<string>();
     return item.ruleNames.flatMap((ruleName) =>
@@ -2429,6 +2589,15 @@ const activateRuleCandidates = (item: { key: string; label: string; ruleNames: s
         return true;
       })
     );
+  });
+  debugTrace('activateRuleCandidates:deduped', {
+    item,
+    candidates: candidates.map((candidate) => ({
+      ruleName: candidate.ruleName,
+      graphId: candidate.graphId,
+      direction: candidate.direction,
+      selectedNodeIds: candidate.selectedNodeIds
+    }))
   });
   if (candidates.length === 0) {
     activeRuleMatches = null;

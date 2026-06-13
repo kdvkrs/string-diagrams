@@ -276,18 +276,18 @@ const en: Translations = {
   puzzles: {
     'clean-up-two-units': {
       level: 'Level 1',
-      title: 'Level 1: Clean Up Two Units',
-      subtitle: "A unit wire followed by multiplication disappears. I'll do the first cleanup; you do the second."
+      title: 'Level 1: Fork Reassociation',
+      subtitle: "Use the same fork reassociation move twice. I'll guide the first one; you finish the second."
     },
     'composite-monad-left-unit': {
       level: 'Level 2',
-      title: 'Level 2: Composite Left Unit',
-      subtitle: 'Create an M-wire and an N-wire, cross N past M, then clean up both units.'
+      title: 'Level 2: Push Through Crossing',
+      subtitle: 'Push a fork through one crossing, then do it again.'
     },
     'both-sides-meet': {
       level: 'Level 3',
-      title: 'Level 3: Make Both Sides Meet',
-      subtitle: 'Rewrite both diagrams toward the same middle shape, rather than pushing only one side across.'
+      title: 'Level 3: Expose the Crossing',
+      subtitle: 'First reassociate the fork, then push it through the crossing that appears.'
     },
     'composite-monad-associativity': {
       level: 'Level 4',
@@ -453,18 +453,18 @@ const de: Translations = {
   puzzles: {
     'clean-up-two-units': {
       level: 'Stufe 1',
-      title: 'Stufe 1: Zwei Einheiten aufräumen',
-      subtitle: 'Ein Einheitsdraht gefolgt von Multiplikation verschwindet. Den ersten Schritt mache ich; den zweiten machst du.'
+      title: 'Stufe 1: Gabel neu assoziieren',
+      subtitle: 'Nutze denselben Gabel-Zug zweimal. Beim ersten führe ich dich; den zweiten machst du.'
     },
     'composite-monad-left-unit': {
       level: 'Stufe 2',
-      title: 'Stufe 2: Linke Einheit der zusammengesetzten Monade',
-      subtitle: 'Erzeuge einen M-Draht und einen N-Draht, kreuze N an M vorbei und räume dann beide Einheiten auf.'
+      title: 'Stufe 2: Durch die Kreuzung schieben',
+      subtitle: 'Schiebe eine Gabel durch eine Kreuzung und mach dann denselben Zug noch einmal.'
     },
     'both-sides-meet': {
       level: 'Stufe 3',
-      title: 'Stufe 3: Beide Seiten treffen sich',
-      subtitle: 'Schreibe beide Diagramme zur gleichen mittleren Form um, statt nur eine Seite hinüberzuschieben.'
+      title: 'Stufe 3: Kreuzung freilegen',
+      subtitle: 'Assoziiere zuerst die Gabel neu und schiebe sie dann durch die sichtbare Kreuzung.'
     },
     'composite-monad-associativity': {
       level: 'Stufe 4',

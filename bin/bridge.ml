@@ -45,39 +45,26 @@ let mu3_state =
    oz: o·id ; z = id·z ; z·id ; id·o\n\
    xyz: y·id ; id·z ; x·id = id·x ; z·id ; id·y"
 
-let clean_two_units_state =
+let fork_reassociation_state =
   "m: M⊗M -> M\n\
-   e: 1 -> M\n\
-   n: N⊗N -> N\n\
-   f: 1 -> N\n\
-   eM: e·M ; m = M\n\
-   fN: f·N ; n = N\n\
-   ------\n\
-   (e·M ; m)·(f·N ; n) = M·N"
-
-let left_unit_state =
-  "m: M⊗M -> M\n\
-   e: 1 -> M\n\
-   n: N⊗N -> N\n\
-   f: 1 -> N\n\
-   x: N⊗M -> M⊗N\n\
-   mn<color=orange> := M·x·N ; m·n\n\
-   ef<color=orange> := e·f\n\
-   fMx: f·M ; x = M·f\n\
-   eM: e·M ; m = M\n\
-   fN: f·N ; n = N\n\
-   ------\n\
-   ef·M·N ; mn = M·N"
-
-let both_sides_state =
-  "m: M⊗M -> M\n\
-   n: N⊗N -> N\n\
-   f: 1 -> N\n\
    mA: m·M ; m = M·m ; m\n\
-   fL: f·N ; n = N\n\
-   fR: N·f ; n = N\n\
    ------\n\
-   (m·M ; m)·(f·N ; n) = (M·m ; m)·(N·f ; n)"
+   m·M·M ; m·M ; m = M·m·M ; M·m ; m"
+
+let push_through_state =
+  "m: M⊗M -> M\n\
+   x: N⊗M -> M⊗N\n\
+   mx: N·m ; x = x·M ; M·x ; m·N\n\
+   ------\n\
+   N·N·m ; N·x ; x·N = N·x·M ; N·M·x ; x·M·N ; M·x·N ; m·N·N"
+
+let expose_push_through_state =
+  "m: M⊗M -> M\n\
+   x: N⊗M -> M⊗N\n\
+   mA: m·M ; m = M·m ; m\n\
+   mx: N·m ; x = x·M ; M·x ; m·N\n\
+   ------\n\
+   N·m·M ; N·m ; x = N·M·m ; x·M ; M·x ; m·N"
 
 let three_monads_state = mu3_state ^ "\n---\nmno·id·id·id ; mno = id·id·id·mno ; mno"
 
@@ -94,26 +81,26 @@ let puzzles = [
   {
     id = "clean-up-two-units";
     level = "Level 1";
-    title = "Level 1: Clean Up Two Units";
-    subtitle = "A unit wire followed by multiplication disappears. I’ll do the first cleanup; you do the second.";
-    source = clean_two_units_state;
-    visible_rules = Some ["eM"; "fN"];
+    title = "Level 1: Fork Reassociation";
+    subtitle = "Use the same fork reassociation move twice. I’ll guide the first one; you finish the second.";
+    source = fork_reassociation_state;
+    visible_rules = Some ["mA"];
   };
   {
     id = "composite-monad-left-unit";
     level = "Level 2";
-    title = "Level 2: Composite Left Unit";
-    subtitle = "Create an M-wire and an N-wire, cross N past M, then clean up both units.";
-    source = left_unit_state;
-    visible_rules = Some ["fMx"; "eM"; "fN"];
+    title = "Level 2: Push Through Crossing";
+    subtitle = "Push a fork through one crossing, then do it again.";
+    source = push_through_state;
+    visible_rules = Some ["mx"];
   };
   {
     id = "both-sides-meet";
     level = "Level 3";
-    title = "Level 3: Make Both Sides Meet";
-    subtitle = "Rewrite both diagrams toward the same middle shape, rather than pushing only one side across.";
-    source = both_sides_state;
-    visible_rules = Some ["mA"; "fL"; "fR"];
+    title = "Level 3: Expose the Crossing";
+    subtitle = "First reassociate the fork, then push it through the crossing that appears.";
+    source = expose_push_through_state;
+    visible_rules = Some ["mA"; "mx"];
   };
   {
     id = "composite-monad-associativity";
@@ -248,6 +235,12 @@ let ensure_sid st (n: node) =
      let sid = Printf.sprintf "n%d" st.sid_counter in
      n#set "sid" sid;
      sid
+
+let assign_fresh_sid st (n: node) =
+  st.sid_counter <- st.sid_counter + 1;
+  let sid = Printf.sprintf "n%d" st.sid_counter in
+  n#set "sid" sid;
+  sid
 
 let fake_iport_obj st =
   function
@@ -542,6 +535,7 @@ let splice_by_nodes st graph_id selected_ids repl =
     | Error e -> failwith (Region.error_message e)
   in
   let repl = Graph.copy st.env repl in
+  iter_nodes repl (fun n -> ignore (assign_fresh_sid st n));
   layout_replacement_into_box repl ex.box;
   let node_is_selected n = List.exists ((==) n) nodes in
   let remap_i = function
