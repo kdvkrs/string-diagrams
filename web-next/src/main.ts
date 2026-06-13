@@ -2,7 +2,7 @@ import './style.css';
 import { OcamlAdapter } from './engine/ocamlAdapter';
 import { type LayoutGraph, type LayoutNode, type LayoutPoint } from './layout/layoutTypes';
 import { animateSceneGraphLayout, layoutSceneGraph, type LayoutSeed } from './layout/physicsLayout';
-import type { PuzzleInfo, RuleAvailability, RuleCandidate, SceneState, SelectionDescriptor } from './model/interop';
+import type { PortRef, PuzzleInfo, RuleAvailability, RuleCandidate, SceneGraph, SceneRule, SceneState, SelectionDescriptor } from './model/interop';
 import { perf } from './perf';
 import {
   type Point,
@@ -35,9 +35,18 @@ type LayoutState = {
   rules: Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>;
 };
 type ActiveRuleMatchSet = {
-  ruleName: string;
+  key: string;
+  label: string;
+  ruleNames: string[];
   candidates: RuleCandidate[];
 } | null;
+type RuleDisplayItem = {
+  key: string;
+  label: string;
+  representativeName: string;
+  ruleNames: string[];
+  rules: SceneRule[];
+};
 
 const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
 const ASSIST_STAGE_SELECTOR = '.stage';
@@ -2052,6 +2061,81 @@ const drawRulePreview = (container: HTMLElement, name: string, dimmed: boolean) 
   drawRulePreviewGraphs(container, rule, dimmed);
 };
 
+const nodeTypeSignature = (node: SceneRule['lhs']['nodes'][number]) => [
+  node.kind,
+  node.nsources,
+  node.ntargets,
+  node.visual.shape ?? '',
+  node.sourceTypes.length,
+  node.targetTypes.length
+].join(':');
+
+const endpointTypeKey = (port: PortRef, nodesById: Map<string, SceneRule['lhs']['nodes'][number]>) => {
+  if (port.kind === 'source' || port.kind === 'target') return port.kind;
+  if (
+    (port.kind === 'nodeSource' || port.kind === 'nodeTarget') &&
+    typeof port.nodeId === 'string'
+  ) {
+    const node = nodesById.get(port.nodeId);
+    return `${port.kind}:${node ? nodeTypeSignature(node) : '?'}`;
+  }
+  return JSON.stringify(port);
+};
+
+const ruleTypeGraphKey = (graph: SceneGraph) => {
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const nodeParts = graph.nodes.map(nodeTypeSignature).sort();
+  const edgeParts = graph.edges
+    .map((edge) => `${endpointTypeKey(edge.from, nodesById)}>${endpointTypeKey(edge.to, nodesById)}`)
+    .sort();
+  return [
+    `s=${graph.sources}`,
+    `t=${graph.targets}`,
+    `nodes=${nodeParts.join('|')}`,
+    `edges=${edgeParts.join('|')}`
+  ].join(';');
+};
+
+const canonicalRuleKey = (rule: SceneRule) => {
+  const forward = `${ruleTypeGraphKey(rule.lhs)} == ${ruleTypeGraphKey(rule.rhs)}`;
+  const backward = `${ruleTypeGraphKey(rule.rhs)} == ${ruleTypeGraphKey(rule.lhs)}`;
+  return forward < backward ? forward : backward;
+};
+
+const simpleRuleLabel = (ruleNames: string[]) => {
+  if (ruleNames.length <= 2) return ruleNames.join('/');
+  return `${ruleNames[0]} +${ruleNames.length - 1}`;
+};
+
+const ruleDisplayItems = (): RuleDisplayItem[] => {
+  if (expertMode) {
+    return scene.rules.map((rule) => ({
+      key: `rule:${rule.name}`,
+      label: rule.name,
+      representativeName: rule.name,
+      ruleNames: [rule.name],
+      rules: [rule]
+    }));
+  }
+  const groups = new Map<string, SceneRule[]>();
+  scene.rules.forEach((rule) => {
+    const key = canonicalRuleKey(rule);
+    const bucket = groups.get(key) ?? [];
+    bucket.push(rule);
+    groups.set(key, bucket);
+  });
+  return Array.from(groups.entries()).map(([key, group]) => {
+    const ruleNames = group.map((rule) => rule.name);
+    return {
+      key: `group:${key}`,
+      label: simpleRuleLabel(ruleNames),
+      representativeName: ruleNames[0],
+      ruleNames,
+      rules: group
+    };
+  });
+};
+
 const renderLevelButtons = () => {
   const key = `${activePuzzleId}|${puzzles.map((p) => `${p.id}:${p.level}:${p.title}`).join(',')}`;
   if (key === renderedLevelsKey) return;
@@ -2084,8 +2168,9 @@ const refreshUi = () => {
   const hasSelection = currentSelection.selectedNodeIds.length > 0;
   const hasManualSelection = expertMode && hasSelection;
   const hasEnabledRule = rules.some((r) => r.enabled);
+  const displayItems = ruleDisplayItems();
   subtitle.textContent = activeRuleMatches
-    ? `${activeRuleMatches.candidates.length} matching region${activeRuleMatches.candidates.length === 1 ? '' : 's'} for ${activeRuleMatches.ruleName}.`
+    ? `${activeRuleMatches.candidates.length} matching region${activeRuleMatches.candidates.length === 1 ? '' : 's'} for ${activeRuleMatches.label}.`
     : hasManualSelection && hasEnabledRule
     ? t.selectedPiecesPrompt(currentSelection.selectedNodeIds.length)
     : lastMessage;
@@ -2098,8 +2183,9 @@ const refreshUi = () => {
     activePuzzleId,
     layouts ? 'ready' : 'pending',
     expertMode ? 'expert' : 'rule-first',
-    activeRuleMatches ? `${activeRuleMatches.ruleName}:${activeRuleMatches.candidates.length}` : 'no-active-rule',
+    activeRuleMatches ? `${activeRuleMatches.key}:${activeRuleMatches.candidates.length}` : 'no-active-rule',
     scene.rules.map((r) => r.name).join(','),
+    displayItems.map((item) => `${item.key}:${item.label}:${item.ruleNames.join('+')}`).join(','),
     rules.map((r) => `${r.name}:${r.enabled ? 1 : 0}:${r.reason ?? ''}`).join(',')
   ].join('|');
   if (ruleKey === renderedRulesKey) {
@@ -2109,40 +2195,53 @@ const refreshUi = () => {
   renderedRulesKey = ruleKey;
   if (!hasSelection) rulesShell.removeAttribute('data-scrolled');
   rulesContainer.replaceChildren(
-    ...scene.rules.map((rule, idx) => {
-      const name = rule.name;
-      const ra = rules.find((r) => r.name === name) ?? { name, enabled: false, reason: t.unavailable };
-      const dimmed = hasManualSelection && !ra.enabled;
-      const manuallyApplicable = hasManualSelection && ra.enabled;
-      const disabled = !layouts || (hasManualSelection && !ra.enabled);
-      const active = activeRuleMatches?.ruleName === name;
+    ...displayItems.map((item, idx) => {
+      const availabilities = item.ruleNames.map((name) => rules.find((r) => r.name === name) ?? { name, enabled: false, reason: t.unavailable });
+      const manuallyApplicable = hasManualSelection && availabilities.some((ra) => ra.enabled);
+      const dimmed = hasManualSelection && !manuallyApplicable;
+      const disabled = !layouts || (hasManualSelection && !manuallyApplicable);
+      const active = activeRuleMatches?.key === item.key;
       const btn = document.createElement('button');
       btn.className = 'rule';
       btn.dataset.dimmed = String(dimmed);
       btn.dataset.active = String(active);
       btn.type = 'button';
       btn.dataset.action = 'rule';
-      btn.dataset.ruleName = name;
+      btn.dataset.ruleName = item.representativeName;
+      btn.dataset.ruleNames = item.ruleNames.join('\n');
+      btn.dataset.ruleGroupKey = item.key;
+      btn.dataset.ruleLabel = item.label;
       btn.dataset.ruleKey = `R${idx + 1}`;
       btn.disabled = disabled;
       btn.title = manuallyApplicable
-        ? t.applyRule(name)
+        ? t.applyRule(item.label)
         : active
           ? `${activeRuleMatches?.candidates.length ?? 0} matching regions`
           : layouts
-            ? `Find matching regions for ${name}`
+            ? `Find matching regions for ${item.label}`
             : t.layoutLoading;
       btn.innerHTML = `
         <div class="rule-meta"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
         <div class="rule-preview" aria-hidden="true"></div>
       `;
       const nameEl = btn.querySelector<HTMLElement>('.rule-name');
-      if (nameEl) nameEl.textContent = name;
+      if (nameEl) nameEl.textContent = item.label;
       const pv = btn.querySelector<HTMLElement>('.rule-preview');
-      if (pv) drawRulePreview(pv, name, dimmed);
+      if (pv) drawRulePreview(pv, item.representativeName, dimmed);
       return btn;
     })
   );
+  setTimeout(() => {
+    rulesContainer.querySelectorAll<HTMLElement>('.rule-preview').forEach((pv) => {
+      if (pv.clientHeight > 0) {
+        const btn = pv.closest<HTMLElement>('button.rule');
+        const name = btn?.dataset.ruleName;
+        const dimmed = btn?.dataset.dimmed === 'true';
+        if (name) drawRulePreview(pv, name, dimmed);
+      }
+    });
+    updateRuleScrollState();
+  }, 0);
   requestAnimationFrame(updateRuleScrollState);
 };
 
@@ -2313,21 +2412,31 @@ const applyRuleToSelection = async (name: string, selection: SelectionDescriptor
   }
 };
 
-const activateRuleCandidates = (name: string) => {
+const activateRuleCandidates = (item: { key: string; label: string; ruleNames: string[] }) => {
   if (!layouts) {
     scene.messages = [t.layoutSettling];
     render();
     return;
   }
   clearManualSelection();
-  const candidates = perf.time('ocaml.ruleCandidates', () => adapter.ruleCandidates(name));
+  const candidates = perf.time('ocaml.ruleCandidates', () => {
+    const seen = new Set<string>();
+    return item.ruleNames.flatMap((ruleName) =>
+      adapter.ruleCandidates(ruleName).filter((candidate) => {
+        const key = candidateKey(candidate);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+    );
+  });
   if (candidates.length === 0) {
     activeRuleMatches = null;
-    scene.messages = [t.ruleNotApplicable(name)];
+    scene.messages = [`${item.label} is not applicable here.`];
     showSelectionFeedback(t.noRulesMatchFeedback);
   } else {
-    activeRuleMatches = { ruleName: name, candidates };
-    scene.messages = [`${candidates.length} matching region${candidates.length === 1 ? '' : 's'} for ${name}.`];
+    activeRuleMatches = { key: item.key, label: item.label, ruleNames: item.ruleNames, candidates };
+    scene.messages = [`${candidates.length} matching region${candidates.length === 1 ? '' : 's'} for ${item.label}.`];
     hideSelectionFeedback();
   }
   invalidateRuleDock();
@@ -2336,18 +2445,32 @@ const activateRuleCandidates = (name: string) => {
 
 const applyCandidate = async (candidate: RuleCandidate) => {
   if (!activeRuleMatches) return;
-  await applyRuleToSelection(activeRuleMatches.ruleName, selectionFromCandidate(candidate));
+  await applyRuleToSelection(candidate.ruleName, selectionFromCandidate(candidate));
 };
 
+const candidateKey = (candidate: RuleCandidate) =>
+  `${candidate.ruleName}|${candidate.graphId}|${candidate.direction}|${[...candidate.selectedNodeIds].sort().join(',')}`;
+
+const ruleNamesFromButton = (btn: HTMLButtonElement) =>
+  (btn.dataset.ruleNames ?? btn.dataset.ruleName ?? '')
+    .split('\n')
+    .map((name) => name.trim())
+    .filter(Boolean);
+
 const applyRuleFromButton = async (btn: HTMLButtonElement) => {
-  const name = btn.dataset.ruleName ?? '';
+  const ruleNames = ruleNamesFromButton(btn);
+  const name = ruleNames[0] ?? '';
   if (!name || btn.disabled) return;
   if (expertMode && currentSelection.selectedNodeIds.length > 0) {
     const selection = { ...currentSelection, selectedNodeIds: [...currentSelection.selectedNodeIds] };
     await applyRuleToSelection(name, selection);
     return;
   }
-  activateRuleCandidates(name);
+  activateRuleCandidates({
+    key: btn.dataset.ruleGroupKey ?? `rule:${name}`,
+    label: btn.dataset.ruleLabel ?? name,
+    ruleNames
+  });
 };
 
 if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent !== 'undefined') {
