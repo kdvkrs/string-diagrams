@@ -20,8 +20,10 @@ export type Translations = {
   rendererTitle: string;
   languageName: string;
   levelLabel: string;
+  modeLabel: string;
   languageLabel: string;
   choosePuzzleLevel: string;
+  chooseMode: string;
   chooseLanguage: string;
   reset: string;
   undo: string;
@@ -93,13 +95,19 @@ export type Translations = {
   notApplicable: string;
   noRuleMatches: (side: string, count: number) => string;
   noRulesMatchFeedback: string;
+  noRuleCandidates: (ruleName: string) => string;
+  noRuleCandidatesFeedback: string;
+  matchingRegionsForRule: (count: number, ruleName: string) => string;
   selectionSummary: (side: string, count: number) => string;
   rulePreviewLoading: string;
   layoutLoading: string;
   lassoPrompt: string;
+  easyPrompt: string;
+  expertPrompt: string;
   selectedPiecesPrompt: (count: number) => string;
   unavailable: string;
   applyRule: (ruleName: string) => string;
+  findMatchingRegions: (ruleName: string) => string;
   copiedJson: string;
   renderer: {
     mode: string;
@@ -118,6 +126,7 @@ export type Translations = {
   };
   assist: {
     level1: AssistStepCopy[];
+    level1Easy: AssistStepCopy[];
     level3: AssistStepCopy[];
     level5: AssistStepCopy[];
   };
@@ -135,8 +144,10 @@ const en: Translations = {
   rendererTitle: 'String Diagram Renderer',
   languageName: 'English',
   levelLabel: 'Level',
+  modeLabel: 'Mode',
   languageLabel: 'Language',
   choosePuzzleLevel: 'Choose puzzle level',
+  chooseMode: 'Choose interaction mode',
   chooseLanguage: 'Choose language',
   reset: 'Reset',
   undo: 'Undo',
@@ -162,10 +173,11 @@ const en: Translations = {
   close: 'Close',
   helpParagraphs: [
     'Your goal is to transform the diagrams on either side until both sides match.',
-    'Use the rewriting rules at the bottom of the screen: select a part of a diagram that matches a rule, then press that rule to transform the selected part.',
+    'In Easy mode, choose a rule at the bottom first, then tap one of the highlighted regions where it applies.',
+    'In Expert mode, circle a subdiagram first, then choose a rule that matches your selection.',
     'Every move is checked by the proof engine. When the diagrams match, you have made a proof.'
   ],
-  tutorialCopy: 'Your goal is to transform the diagrams on either side until both sides match. Select a part that matches a rule, then press that rule to transform it.',
+  tutorialCopy: 'Your goal is to transform the diagrams on either side until both sides match. Easy mode starts with a rule; Expert mode starts with a circled region.',
   move: 'Move',
   checkedRule: 'checked rule',
   welcomeTitle: 'Can you untangle the proof?',
@@ -212,13 +224,19 @@ const en: Translations = {
   notApplicable: 'not applicable',
   noRuleMatches: (side, count) => `No rule matches this ${side} selection (${count} ${plural(count, 'node', 'nodes')}).`,
   noRulesMatchFeedback: 'No rules match your selection. Try circling another tangle.',
+  noRuleCandidates: (ruleName) => `No highlighted regions for ${ruleName}.`,
+  noRuleCandidatesFeedback: 'That rule does not apply right now. Try another rule.',
+  matchingRegionsForRule: (count, ruleName) => `${count} highlighted region${count === 1 ? '' : 's'} for ${ruleName}.`,
   selectionSummary: (side, count) => `Selection on ${side}: ${count} ${plural(count, 'node', 'nodes')}. Applicable rules highlighted.`,
   rulePreviewLoading: 'rewrite rule preview loading',
   layoutLoading: 'layout...',
   lassoPrompt: 'Lasso a tangle, then pick a move',
+  easyPrompt: 'Pick a rule, then tap a highlighted region',
+  expertPrompt: 'Circle a region, then pick a move',
   selectedPiecesPrompt: (count) => `${count} ${plural(count, 'piece', 'pieces')} selected. Pick a lit-up move.`,
   unavailable: 'Unavailable',
   applyRule: (ruleName) => `Apply ${ruleName}`,
+  findMatchingRegions: (ruleName) => `Find highlighted regions for ${ruleName}`,
   copiedJson: 'Copied JSON if clipboard access is available.',
   renderer: {
     mode: 'Mode',
@@ -256,6 +274,28 @@ const en: Translations = {
         kicker: 'Step 4 of 4',
         title: 'Match both sides',
         body: 'Keep making checked moves until the diagrams on both sides match.'
+      }
+    ],
+    level1Easy: [
+      {
+        kicker: 'Step 1 of 4',
+        title: 'Pick a rule first',
+        body: 'Tap the Fork reassociation card. The app will show every place where that move fits.'
+      },
+      {
+        kicker: 'Step 2 of 4',
+        title: 'Choose a highlighted region',
+        body: 'The glowing regions are valid moves. Tap one on the left side to apply the rule.'
+      },
+      {
+        kicker: 'Step 3 of 4',
+        title: 'Watch the rewrite',
+        body: 'That region was replaced by an equivalent fork shape. The move was checked.'
+      },
+      {
+        kicker: 'Step 4 of 4',
+        title: 'Now you try',
+        body: 'Use the same rule again to make the left diagram match the right one.'
       }
     ],
     level3: [
@@ -312,8 +352,10 @@ const de: Translations = {
   rendererTitle: 'String-Diagramm-Renderer',
   languageName: 'Deutsch',
   levelLabel: 'Stufe',
+  modeLabel: 'Modus',
   languageLabel: 'Sprache',
   choosePuzzleLevel: 'Puzzle-Stufe wählen',
+  chooseMode: 'Interaktionsmodus wählen',
   chooseLanguage: 'Sprache wählen',
   reset: 'Zurücksetzen',
   undo: 'Rückgängig',
@@ -339,10 +381,11 @@ const de: Translations = {
   close: 'Schließen',
   helpParagraphs: [
     'Dein Ziel ist es, die Diagramme auf beiden Seiten so umzuformen, dass sie übereinstimmen.',
-    'Nutze die Umschreiberegeln unten auf dem Bildschirm: Wähle einen Teil des Diagramms aus, der zu einer Regel passt, und tippe dann auf diese Regel.',
+    'Im einfachen Modus wählst du unten zuerst eine Regel und tippst dann auf eine der markierten passenden Stellen.',
+    'Im Expertenmodus kreist du zuerst ein Teildiagramm ein und wählst dann eine passende Regel.',
     'Jeder Zug wird von der Beweis-Engine geprüft. Wenn die Diagramme übereinstimmen, hast du einen Beweis erstellt.'
   ],
-  tutorialCopy: 'Dein Ziel ist es, die Diagramme auf beiden Seiten so umzuformen, dass sie übereinstimmen. Wähle einen Teil aus, der zu einer Regel passt, und tippe dann auf diese Regel.',
+  tutorialCopy: 'Dein Ziel ist es, die Diagramme auf beiden Seiten so umzuformen, dass sie übereinstimmen. Im einfachen Modus beginnst du mit einer Regel; im Expertenmodus mit einem eingekreisten Bereich.',
   move: 'Zug',
   checkedRule: 'geprüfte Regel',
   welcomeTitle: 'Kannst du den Beweis entwirren?',
@@ -389,13 +432,19 @@ const de: Translations = {
   notApplicable: 'nicht anwendbar',
   noRuleMatches: (side, count) => `Keine Regel passt zu dieser Auswahl auf der ${side} (${count} ${plural(count, 'Knoten', 'Knoten')}).`,
   noRulesMatchFeedback: 'Keine Regel passt zu deiner Auswahl. Kreise ein anderes Knäuel ein.',
+  noRuleCandidates: (ruleName) => `Keine markierte Stelle für ${ruleName}.`,
+  noRuleCandidatesFeedback: 'Diese Regel passt gerade nirgends. Versuche eine andere Regel.',
+  matchingRegionsForRule: (count, ruleName) => `${count} markierte ${plural(count, 'Stelle', 'Stellen')} für ${ruleName}.`,
   selectionSummary: (side, count) => `Auswahl auf der ${side}: ${count} ${plural(count, 'Knoten', 'Knoten')}. Anwendbare Regeln sind hervorgehoben.`,
   rulePreviewLoading: 'Vorschau der Umschreiberegel wird geladen',
   layoutLoading: 'Layout...',
   lassoPrompt: 'Kreise ein Knäuel ein und wähle dann einen Zug',
+  easyPrompt: 'Wähle eine Regel und tippe dann auf eine markierte Stelle',
+  expertPrompt: 'Kreise einen Bereich ein und wähle dann einen Zug',
   selectedPiecesPrompt: (count) => `${count} ${plural(count, 'Teil', 'Teile')} ausgewählt. Wähle einen hervorgehobenen Zug.`,
   unavailable: 'Nicht verfügbar',
   applyRule: (ruleName) => `${ruleName} anwenden`,
+  findMatchingRegions: (ruleName) => `Markierte Stellen für ${ruleName} suchen`,
   copiedJson: 'JSON kopiert, wenn Zwischenablagezugriff verfügbar ist.',
   renderer: {
     mode: 'Modus',
@@ -433,6 +482,28 @@ const de: Translations = {
         kicker: 'Schritt 4 von 4',
         title: 'Bring beide Seiten zur Deckung',
         body: 'Mach weiter geprüfte Züge, bis die Diagramme auf beiden Seiten übereinstimmen.'
+      }
+    ],
+    level1Easy: [
+      {
+        kicker: 'Schritt 1 von 4',
+        title: 'Wähle zuerst eine Regel',
+        body: 'Tippe auf die Karte „Gabel neu assoziieren“. Die App zeigt dir alle passenden Stellen.'
+      },
+      {
+        kicker: 'Schritt 2 von 4',
+        title: 'Wähle eine markierte Stelle',
+        body: 'Die leuchtenden Bereiche sind gültige Züge. Tippe links auf einen Bereich, um die Regel anzuwenden.'
+      },
+      {
+        kicker: 'Schritt 3 von 4',
+        title: 'Schau dir die Umschreibung an',
+        body: 'Dieser Bereich wurde durch eine äquivalente Gabelform ersetzt. Der Zug wurde geprüft.'
+      },
+      {
+        kicker: 'Schritt 4 von 4',
+        title: 'Jetzt bist du dran',
+        body: 'Nutze dieselbe Regel noch einmal, damit das linke Diagramm zum rechten passt.'
       }
     ],
     level3: [

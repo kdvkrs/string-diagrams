@@ -1180,10 +1180,112 @@ body.tut-on .stage::after {
   display: block;
   width: min(720px, 100%);
   max-width: 100%;
-  max-height: min(520px, 54vh);
+  max-height: min(420px, 42vh);
   object-fit: contain;
-  margin: 2px auto 26px;
+  margin: 2px auto 20px;
   border-radius: var(--radius);
+}
+
+.welcome-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin: 0 0 22px;
+  text-align: left;
+}
+
+.welcome-control {
+  display: grid;
+  gap: 7px;
+}
+
+.welcome-label {
+  color: var(--ink-soft);
+  font: 800 11px/1 var(--font);
+  text-transform: uppercase;
+}
+
+.mode-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mode-choice-btn {
+  min-height: 78px;
+  padding: 12px 14px;
+  border: 1px solid var(--paper-edge);
+  border-radius: 8px;
+  background: #f8fbfe;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mode-choice-btn[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--hot-bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.mode-choice-btn span {
+  display: block;
+  margin-bottom: 5px;
+  font: 800 15px/1.1 var(--font);
+}
+
+.mode-choice-btn small {
+  display: block;
+  color: var(--ink-soft);
+  font: 600 12px/1.25 var(--font);
+}
+
+.welcome-language {
+  min-width: 150px;
+}
+
+.welcome-select {
+  position: relative;
+  display: block;
+  min-height: 42px;
+  border: 1px solid var(--paper-edge);
+  border-radius: 8px;
+  background: #f8fbfe;
+}
+
+.welcome-select select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 34px 0 12px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 800 13px/1 var(--font);
+  cursor: pointer;
+  outline: none;
+}
+
+.welcome-select::after {
+  content: "⌄";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent);
+  pointer-events: none;
+  font: 900 15px/1 var(--font);
+}
+
+@media (max-width: 720px) {
+  .welcome-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-choice {
+    grid-template-columns: 1fr;
+  }
 }
 
 .reset-demo-card {

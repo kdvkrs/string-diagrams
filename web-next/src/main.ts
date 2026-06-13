@@ -23,7 +23,8 @@ type AssistStep = {
   focusRect?: AssistFocusRect;
   lassoRect?: AssistRelativeRect;
   selectionDemo?: 'level-1-em';
-  before?: 'select-level-1' | 'apply-level-1';
+  before?: 'select-level-1' | 'apply-level-1' | 'activate-level-1-rule' | 'apply-level-1-candidate';
+  pulse?: 'level-1-rule';
   kicker: string;
   title: string;
   body: string;
@@ -57,7 +58,7 @@ storeLocale(locale);
 document.documentElement.lang = locale;
 document.title = t.appTitle;
 
-const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
+const ASSIST_STEPS_LEVEL_1_EXPERT: AssistStep[] = [
   {
     selector: ASSIST_STAGE_SELECTOR,
     padding: 8,
@@ -96,6 +97,47 @@ const ASSIST_STEPS_LEVEL_1: AssistStep[] = [
     kicker: t.assist.level1[3].kicker,
     title: t.assist.level1[3].title,
     body: t.assist.level1[3].body,
+    placement: 'top'
+  }
+];
+
+const ASSIST_STEPS_LEVEL_1_EASY: AssistStep[] = [
+  {
+    selector: '#rules',
+    padding: 8,
+    pulse: 'level-1-rule',
+    kicker: t.assist.level1Easy[0].kicker,
+    title: t.assist.level1Easy[0].title,
+    body: t.assist.level1Easy[0].body,
+    placement: 'top'
+  },
+  {
+    selector: ASSIST_STAGE_SELECTOR,
+    padding: 8,
+    focusRect: 'lhs',
+    before: 'activate-level-1-rule',
+    kicker: t.assist.level1Easy[1].kicker,
+    title: t.assist.level1Easy[1].title,
+    body: t.assist.level1Easy[1].body,
+    placement: 'right'
+  },
+  {
+    selector: ASSIST_STAGE_SELECTOR,
+    padding: 8,
+    focusRect: 'lhs',
+    before: 'apply-level-1-candidate',
+    kicker: t.assist.level1Easy[2].kicker,
+    title: t.assist.level1Easy[2].title,
+    body: t.assist.level1Easy[2].body,
+    placement: 'right'
+  },
+  {
+    selector: '#rules',
+    padding: 8,
+    pulse: 'level-1-rule',
+    kicker: t.assist.level1Easy[3].kicker,
+    title: t.assist.level1Easy[3].title,
+    body: t.assist.level1Easy[3].body,
     placement: 'top'
   }
 ];
@@ -152,6 +194,8 @@ installKioskGestureGuards();
 const expertModeLabel = locale === 'de' ? 'Expertenmodus' : 'Expert mode';
 const expertModeDescription = locale === 'de' ? 'Bereich einkreisen statt Regel wählen' : 'Circle a region instead of choosing a rule';
 const moreOptionsLabel = locale === 'de' ? 'Mehr Optionen' : 'More options';
+const easyModeLabel = locale === 'de' ? 'Einfach' : 'Easy';
+const easyModeDescription = locale === 'de' ? 'Regel wählen, dann markierte Stelle antippen' : 'Pick a rule, then tap a highlighted region';
 
 app.innerHTML = `
   <header class="topbar">
@@ -287,6 +331,29 @@ app.innerHTML = `
         <div class="modal-title">${t.welcomeTitle}</div>
         <div class="modal-body">${t.welcomeBody}</div>
         <img class="assist-welcome-image" src="./sd_upscaled.png" alt="" aria-hidden="true"/>
+        <div class="welcome-controls" aria-label="${t.chooseMode}">
+          <div class="welcome-control">
+            <div class="welcome-label">${t.modeLabel}</div>
+            <div class="mode-choice" role="group" aria-label="${t.chooseMode}">
+              <button class="mode-choice-btn" data-action="welcome-mode" data-mode="easy" type="button">
+                <span>${easyModeLabel}</span>
+                <small>${easyModeDescription}</small>
+              </button>
+              <button class="mode-choice-btn" data-action="welcome-mode" data-mode="expert" type="button">
+                <span>${expertModeLabel}</span>
+                <small>${expertModeDescription}</small>
+              </button>
+            </div>
+          </div>
+          <label class="welcome-control welcome-language">
+            <span class="welcome-label">${t.languageLabel}</span>
+            <span class="welcome-select">
+              <select id="welcome-locale-actions" aria-label="${t.chooseLanguage}">
+                ${supportedLocales.map((value) => `<option value="${value}"${value === locale ? ' selected' : ''}>${translations[value].languageName}</option>`).join('')}
+              </select>
+            </span>
+          </label>
+        </div>
         <div class="modal-actions">
           <button class="btn btn--primary" data-action="assist-start">${t.startDemo}</button>
         </div>
@@ -398,6 +465,7 @@ const perfPanel = document.querySelector<HTMLElement>('#perf-panel');
 const perfOutput = document.querySelector<HTMLPreElement>('#perf-output');
 const levelActions = document.querySelector<HTMLSelectElement>('#level-actions');
 const localeActions = document.querySelector<HTMLSelectElement>('#locale-actions');
+const welcomeLocaleActions = document.querySelector<HTMLSelectElement>('#welcome-locale-actions');
 const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="expert-toggle"]');
@@ -407,7 +475,7 @@ if (
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
   !perfPanel || !perfOutput ||
-  !levelActions || !localeActions || !rulesShell || !rulesContainer || !expertToggle
+  !levelActions || !localeActions || !welcomeLocaleActions || !rulesShell || !rulesContainer || !expertToggle
 ) {
   throw new Error('Missing required UI element');
 }
@@ -444,94 +512,6 @@ const disabledRulesFor = (s: SceneState, reason = t.reason('No selection')): Rul
   s.rules.map((rule) => ({ name: rule.name, enabled: false, reason }));
 let rules: RuleAvailability[] = disabledRulesFor(scene);
 
-const DEBUG_LEVEL_TRACE = true;
-const DEBUG_LEVEL_PREFIX = '[DEBUG-sd-levels]';
-
-const debugGraphSnapshot = (graph: SceneGraph) => ({
-  id: graph.id,
-  sources: graph.sources,
-  targets: graph.targets,
-  nodeCount: graph.nodes.length,
-  edgeCount: graph.edges.length,
-  nodes: graph.nodes.map((node) => ({
-    id: node.id,
-    label: node.label,
-    kind: node.kind,
-    shape: node.visual.shape ?? '',
-    nsources: node.nsources,
-    ntargets: node.ntargets
-  }))
-});
-
-const debugLayoutSnapshot = (graph: LayoutGraph | undefined) => {
-  if (!graph) return null;
-  const nodes = graph.nodes.filter((node) => !node.boundary);
-  const xs = nodes.flatMap((node) => [node.x, node.x + node.w]);
-  const ys = nodes.flatMap((node) => [node.y, node.y + node.h]);
-  return {
-    id: graph.id,
-    width: graph.width,
-    height: graph.height,
-    nodeCount: nodes.length,
-    bounds: xs.length === 0 ? null : {
-      minX: Math.min(...xs),
-      maxX: Math.max(...xs),
-      minY: Math.min(...ys),
-      maxY: Math.max(...ys)
-    },
-    nodes: nodes.map((node) => ({
-      id: node.id,
-      label: node.label,
-      x: Math.round(node.x * 10) / 10,
-      y: Math.round(node.y * 10) / 10,
-      modelX: node.modelX === undefined ? undefined : Math.round(node.modelX * 10) / 10,
-      modelY: node.modelY === undefined ? undefined : Math.round(node.modelY * 10) / 10
-    }))
-  };
-};
-
-const debugSceneSnapshot = (s: SceneState) => ({
-  puzzleId: s.puzzleId,
-  level: s.level,
-  title: s.title,
-  rules: s.rules.map((rule) => rule.name),
-  messages: s.messages,
-  graphs: s.graphs.map(debugGraphSnapshot)
-});
-
-const debugSelectionSnapshot = (selection: SelectionDescriptor) => ({
-  graphId: selection.graphId,
-  selectedNodeIds: [...selection.selectedNodeIds],
-  polygonPoints: selection.polygon.length,
-  cuts: selection.cuts.length
-});
-
-const debugRuleCandidateSnapshot = (ruleNames: string[]) => {
-  const names = [...new Set(ruleNames)];
-  return names.map((ruleName) => {
-    try {
-      return {
-        ruleName,
-        candidates: adapter.ruleCandidates(ruleName).map((candidate) => ({
-          graphId: candidate.graphId,
-          direction: candidate.direction,
-          selectedNodeIds: candidate.selectedNodeIds
-        }))
-      };
-    } catch (error) {
-      return {
-        ruleName,
-        error: error instanceof Error ? error.message : String(error)
-      };
-    }
-  });
-};
-
-const debugTrace = (event: string, payload: Record<string, unknown>) => {
-  if (!DEBUG_LEVEL_TRACE) return;
-  console.log(DEBUG_LEVEL_PREFIX, event, payload);
-};
-
 const emptySelection = (): SelectionDescriptor => ({
   graphId: 'lhs',
   selectedNodeIds: [],
@@ -540,8 +520,13 @@ const emptySelection = (): SelectionDescriptor => ({
   cycleOrder: []
 });
 
+type InteractionMode = 'easy' | 'expert';
+const MODE_STORAGE_KEY = 'string-diagrams.interactionMode';
+const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
+const initialInteractionMode: InteractionMode = storedMode === 'expert' ? 'expert' : 'easy';
+
 let currentSelection: SelectionDescriptor = emptySelection();
-let expertMode = false;
+let expertMode = initialInteractionMode === 'expert';
 let activeRuleMatches: ActiveRuleMatchSet = null;
 let lasso: Point[] = [];
 let dragging = false;
@@ -562,7 +547,7 @@ let assistFingerFrame = 0;
 let assistFingerStartedAt = 0;
 let selectionFeedbackTimer = 0;
 let levelOneAssistSelection: SelectionDescriptor | null = null;
-let levelOneAssistRuleName = 'eM';
+let levelOneAssistRuleName = 'mA';
 let levelOneAssistApplied = false;
 let renderQueued = false;
 let queuedRenderRefresh = false;
@@ -573,6 +558,32 @@ let debugCrossings: CrossingDiagnostic[] = [];
 const TUTORIAL_LASSO_PAD = 16;
 const ASSIST_LASSO_DURATION_MS = 4800;
 const SHOW_NODE_LABELS = false;
+
+const interactionMode = (): InteractionMode => (expertMode ? 'expert' : 'easy');
+
+const storeInteractionMode = () => {
+  window.localStorage.setItem(MODE_STORAGE_KEY, interactionMode());
+};
+
+const syncModeControls = () => {
+  expertToggle.setAttribute('aria-pressed', String(expertMode));
+  expertToggle.dataset.active = String(expertMode);
+  document.querySelectorAll<HTMLButtonElement>('[data-action="welcome-mode"]').forEach((button) => {
+    const active = button.dataset.mode === interactionMode();
+    button.dataset.active = String(active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+};
+
+const setExpertMode = (nextExpertMode: boolean) => {
+  expertMode = nextExpertMode;
+  storeInteractionMode();
+  if (!expertMode) clearManualSelection();
+  clearActiveRuleMatches();
+  invalidateRuleDock();
+  syncModeControls();
+  render();
+};
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
@@ -1124,8 +1135,34 @@ const applyLevelOneAssistRule = async () => {
   }
 };
 
+const levelOneRuleItem = () =>
+  ruleDisplayItems().find((item) => item.ruleNames.includes(levelOneAssistRuleName));
+
+const activateLevelOneAssistRule = () => {
+  const item = levelOneRuleItem();
+  if (!item) return;
+  activateRuleCandidates(item);
+};
+
+const levelOneEasyCandidate = () => {
+  activateLevelOneAssistRule();
+  return activeRuleMatches?.candidates.find((candidate) =>
+    candidate.graphId === 'lhs' && candidate.direction === 'forward'
+  ) ?? activeRuleMatches?.candidates[0] ?? null;
+};
+
+const applyLevelOneEasyCandidate = async () => {
+  if (activePuzzleId !== 'clean-up-two-units' || levelOneAssistApplied) return;
+  const candidate = levelOneEasyCandidate();
+  if (!candidate) return;
+  levelOneAssistApplied = true;
+  await applyRuleToSelection(candidate.ruleName, selectionFromCandidate(candidate));
+};
+
 const currentAssistSteps = () => {
-  if (activePuzzleId === 'clean-up-two-units') return ASSIST_STEPS_LEVEL_1;
+  if (activePuzzleId === 'clean-up-two-units') {
+    return expertMode ? ASSIST_STEPS_LEVEL_1_EXPERT : ASSIST_STEPS_LEVEL_1_EASY;
+  }
   if (activePuzzleId === 'both-sides-meet') return ASSIST_STEPS_LEVEL_3;
   if (activePuzzleId === 'three-monad-composition') return ASSIST_STEPS_LEVEL_5;
   return [];
@@ -1337,8 +1374,10 @@ const updateAssistRuleHighlight = (step: AssistStep) => {
   document
     .querySelectorAll('.rule.assist-rule-pulse, .rule.tut-hot')
     .forEach((el) => el.classList.remove('assist-rule-pulse', 'tut-hot'));
-  if (step.before !== 'select-level-1') return;
-  const rule = rulesContainer.querySelector<HTMLElement>(`.rule[data-rule-name="${levelOneAssistRuleName}"]`);
+  if (step.before !== 'select-level-1' && step.pulse !== 'level-1-rule') return;
+  const rule = rulesContainer.querySelector<HTMLElement>(
+    `.rule[data-rule-name="${levelOneAssistRuleName}"], .rule[data-rule-names~="${levelOneAssistRuleName}"]`
+  );
   if (!rule) return;
   rule.classList.add('tut-hot', 'assist-rule-pulse');
 };
@@ -1367,7 +1406,7 @@ const renderAssistStep = () => {
   tutorialKicker.textContent = step.kicker;
   tutorialTitle.textContent = step.title;
   tutorialBody.textContent = step.body;
-  tutorialNext.textContent = assistIndex === assistSteps.length - 1 ? 'Got it' : 'Next';
+  tutorialNext.textContent = assistIndex === assistSteps.length - 1 ? t.gotIt : t.next;
   paintAssistDots();
   updateAssistRuleHighlight(step);
 };
@@ -1375,6 +1414,8 @@ const renderAssistStep = () => {
 const runAssistStepBefore = async (step: AssistStep) => {
   if (step.before === 'select-level-1') selectLevelOneAssistTangle();
   if (step.before === 'apply-level-1') await applyLevelOneAssistRule();
+  if (step.before === 'activate-level-1-rule') activateLevelOneAssistRule();
+  if (step.before === 'apply-level-1-candidate') await applyLevelOneEasyCandidate();
 };
 
 const nextAssistStep = async () => {
@@ -1616,14 +1657,6 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
   const epoch = ++layoutEpoch;
   const localizedNextScene = localizeScene(nextScene);
   const finalMessages = [...localizedNextScene.messages];
-  debugTrace('animateRewriteScene:start', {
-    graphId,
-    selectedNodeIds: [...selectedNodeIds],
-    collapseCenter,
-    stableSeedNodeIds: [...(seed?.nodePositions?.keys() ?? [])],
-    incomingScene: debugSceneSnapshot(localizedNextScene),
-    layoutBefore: debugLayoutSnapshot(layouts?.graphs.get(graphId))
-  });
   scene = localizedNextScene;
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
@@ -1683,10 +1716,6 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
       );
       if (epoch !== layoutEpoch) return;
       nextGraphs.set(graphId, finalLayout);
-      debugTrace('animateRewriteScene:final-layout', {
-        graphId,
-        finalLayout: debugLayoutSnapshot(finalLayout)
-      });
     }
     scene.messages = finalMessages.length > 0 ? finalMessages : [t.rewriteReplayFinished];
   } catch (error) {
@@ -1696,12 +1725,6 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
     void layoutScene(localizedNextScene);
   } finally {
     if (epoch === layoutEpoch) {
-      debugTrace('animateRewriteScene:finish', {
-        graphId,
-        messages: scene.messages,
-        layouts: scene.graphs.map((graph) => debugLayoutSnapshot(layouts?.graphs.get(graph.id))),
-        candidates: debugRuleCandidateSnapshot(scene.rules.map((rule) => rule.name))
-      });
       render();
     }
   }
@@ -2132,15 +2155,6 @@ const evaluateSelection = (panels: PanelMap) => {
     debug: perf.debugSelection
   };
   rules = perf.time('ocaml.evaluateSelection', () => adapter.evaluateSelection(currentSelection));
-  debugTrace('evaluateSelection', {
-    selection: debugSelectionSnapshot(currentSelection),
-    selectedLabels: layout.nodes
-      .filter((node) => selected.includes(node.id))
-      .map((node) => ({ id: node.id, label: node.label, x: node.x, y: node.y })),
-    availability: rules,
-    scene: debugSceneSnapshot(scene),
-    layout: debugLayoutSnapshot(layout)
-  });
   if (!rules.some((r) => r.enabled)) {
     const why = rules.map((r) => `${r.name}: ${r.reason ? t.reason(r.reason) : t.notApplicable}`).join(' | ');
     scene.messages = [t.noRuleMatches(t.graphSide(graphId), selected.length), why];
@@ -2294,20 +2308,20 @@ const updateRuleScrollState = () => {
 };
 
 const refreshUi = () => {
-  const lastMessage = scene.messages[0] || scene.subtitle || t.lassoPrompt;
+  const modePrompt = expertMode ? t.expertPrompt : t.easyPrompt;
+  const lastMessage = scene.messages[0] || scene.subtitle || modePrompt;
   const hasSelection = currentSelection.selectedNodeIds.length > 0;
   const hasManualSelection = expertMode && hasSelection;
   const hasEnabledRule = rules.some((r) => r.enabled);
   const displayItems = ruleDisplayItems();
   subtitle.textContent = activeRuleMatches
-    ? `${activeRuleMatches.candidates.length} matching region${activeRuleMatches.candidates.length === 1 ? '' : 's'} for ${activeRuleMatches.label}.`
+    ? t.matchingRegionsForRule(activeRuleMatches.candidates.length, activeRuleMatches.label)
     : hasManualSelection && hasEnabledRule
     ? t.selectedPiecesPrompt(currentSelection.selectedNodeIds.length)
     : lastMessage;
   if (proofOpen) proof.innerHTML = highlightRocq(currentProofText());
   renderLevelButtons();
-  expertToggle.setAttribute('aria-pressed', String(expertMode));
-  expertToggle.dataset.active = String(expertMode);
+  syncModeControls();
   rulesContainer.dataset.selection = String(hasManualSelection);
   const ruleKey = [
     activePuzzleId,
@@ -2346,9 +2360,9 @@ const refreshUi = () => {
       btn.title = manuallyApplicable
         ? t.applyRule(item.label)
         : active
-          ? `${activeRuleMatches?.candidates.length ?? 0} matching regions`
+          ? t.matchingRegionsForRule(activeRuleMatches?.candidates.length ?? 0, item.label)
           : layouts
-            ? `Find matching regions for ${item.label}`
+            ? t.findMatchingRegions(item.label)
             : t.layoutLoading;
       btn.innerHTML = `
         <div class="rule-meta"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
@@ -2528,37 +2542,13 @@ const selectionFromCandidate = (candidate: RuleCandidate): SelectionDescriptor =
 const applyRuleToSelection = async (name: string, selection: SelectionDescriptor) => {
   const seed = seedFromCurrentLayout(selection);
   const collapseCenter = layoutCenterFromCurrentSelection(selection);
-  debugTrace('applyRuleToSelection:start', {
-    ruleName: name,
-    selection: debugSelectionSnapshot(selection),
-    sceneBefore: debugSceneSnapshot(scene),
-    candidatesBefore: debugRuleCandidateSnapshot(scene.rules.map((rule) => rule.name)),
-    layoutBefore: debugLayoutSnapshot(layouts?.graphs.get(selection.graphId)),
-    seedNodeIds: [...(seed?.nodePositions?.keys() ?? [])],
-    collapseCenter
-  });
   const res = perf.time('ocaml.applyRule', () => adapter.applyRule(name, selection));
-  debugTrace('applyRuleToSelection:result', {
-    ruleName: name,
-    ok: res.ok,
-    error: res.error,
-    proofDelta: res.proofDelta,
-    sceneAfter: res.scene ? debugSceneSnapshot(res.scene) : null,
-    candidatesAfter: res.scene ? debugRuleCandidateSnapshot(res.scene.rules.map((rule) => rule.name)) : []
-  });
   if (res.ok && res.scene) {
     bumpMoves();
     const solved = res.scene.messages.some((m) => m.includes('You just made a proof'));
     await animateSelectionCollapse(selection);
     clearSelection();
     await animateRewriteScene(res.scene, selection.graphId, seed, collapseCenter, new Set(selection.selectedNodeIds));
-    debugTrace('applyRuleToSelection:after-animation', {
-      ruleName: name,
-      selection: debugSelectionSnapshot(selection),
-      sceneAfterAnimation: debugSceneSnapshot(scene),
-      candidatesAfterAnimation: debugRuleCandidateSnapshot(scene.rules.map((rule) => rule.name)),
-      layoutAfter: debugLayoutSnapshot(layouts?.graphs.get(selection.graphId))
-    });
     if (solved) showSuccess();
   } else {
     scene.messages = [res.error ? t.reason(res.error) : t.ruleNotApplicable(name)];
@@ -2573,12 +2563,6 @@ const activateRuleCandidates = (item: { key: string; label: string; ruleNames: s
     return;
   }
   clearManualSelection();
-  debugTrace('activateRuleCandidates:start', {
-    item,
-    scene: debugSceneSnapshot(scene),
-    rawCandidates: debugRuleCandidateSnapshot(item.ruleNames),
-    layouts: scene.graphs.map((graph) => debugLayoutSnapshot(layouts?.graphs.get(graph.id)))
-  });
   const candidates = perf.time('ocaml.ruleCandidates', () => {
     const seen = new Set<string>();
     return item.ruleNames.flatMap((ruleName) =>
@@ -2590,22 +2574,13 @@ const activateRuleCandidates = (item: { key: string; label: string; ruleNames: s
       })
     );
   });
-  debugTrace('activateRuleCandidates:deduped', {
-    item,
-    candidates: candidates.map((candidate) => ({
-      ruleName: candidate.ruleName,
-      graphId: candidate.graphId,
-      direction: candidate.direction,
-      selectedNodeIds: candidate.selectedNodeIds
-    }))
-  });
   if (candidates.length === 0) {
     activeRuleMatches = null;
-    scene.messages = [`${item.label} is not applicable here.`];
-    showSelectionFeedback(t.noRulesMatchFeedback);
+    scene.messages = [t.noRuleCandidates(item.label)];
+    showSelectionFeedback(t.noRuleCandidatesFeedback);
   } else {
     activeRuleMatches = { key: item.key, label: item.label, ruleNames: item.ruleNames, candidates };
-    scene.messages = [`${candidates.length} matching region${candidates.length === 1 ? '' : 's'} for ${item.label}.`];
+    scene.messages = [t.matchingRegionsForRule(candidates.length, item.label)];
     hideSelectionFeedback();
   }
   invalidateRuleDock();
@@ -2767,11 +2742,11 @@ document.addEventListener('click', (e) => {
     setScene(adapter.redo());
     render();
   } else if (action === 'expert-toggle') {
-    expertMode = !expertMode;
-    if (!expertMode) clearManualSelection();
-    else clearActiveRuleMatches();
+    setExpertMode(!expertMode);
     hideSelectionFeedback();
-    render();
+  } else if (action === 'welcome-mode') {
+    const mode = actionEl.dataset.mode;
+    setExpertMode(mode === 'expert');
   } else if (action === 'rule' && actionEl instanceof HTMLButtonElement) {
     applyRuleFromButton(actionEl);
   } else if (action === 'see-proof') {
@@ -2782,7 +2757,8 @@ document.addEventListener('click', (e) => {
     proofOpen = false;
     proofPanel.removeAttribute('data-open');
   } else if (action === 'help') {
-    void startTutorial();
+    if (expertMode) void startTutorial();
+    else startAssist();
   } else if (action === 'close-tutorial') {
     stopTutorial();
   } else if (action === 'assist-next') {
@@ -2829,6 +2805,11 @@ localeActions.addEventListener('change', () => {
   if (nextLocale === 'en' || nextLocale === 'de') switchLocale(nextLocale);
 });
 
+welcomeLocaleActions.addEventListener('change', () => {
+  const nextLocale = welcomeLocaleActions.value;
+  if (nextLocale === 'en' || nextLocale === 'de') switchLocale(nextLocale);
+});
+
 rulesContainer.addEventListener(
   'scroll',
   () => {
@@ -2847,5 +2828,6 @@ if (typeof (window as unknown as { ResizeObserver?: typeof ResizeObserver }).Res
   window.addEventListener('resize', () => requestRender('resize', false));
 }
 
+syncModeControls();
 void layoutScene(scene);
 maybeStartAssist();
