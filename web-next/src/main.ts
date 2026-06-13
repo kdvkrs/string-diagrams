@@ -2040,14 +2040,14 @@ const rulePreviewSvg = (rule: { lhs: LayoutGraph; rhs: LayoutGraph }, width: num
   rulePreviewSvgBase(rule, width, height, dimmed, { pinColor: cssVar('--pin', '#9aa8b8') });
 
 const drawRulePreviewGraphs = (container: HTMLElement, rule: { lhs: LayoutGraph; rhs: LayoutGraph }, dimmed: boolean) => {
-  const width = Math.max(220, Math.floor(container.clientWidth || 220));
-  const height = Math.max(92, Math.floor(container.clientHeight || 92));
+  const width = Math.max(60, Math.floor(container.clientWidth || 220));
+  const height = Math.max(40, Math.floor(container.clientHeight || 92));
   container.innerHTML = rulePreviewSvg(rule, width, height, dimmed);
 };
 
 const drawRulePreview = (container: HTMLElement, name: string, dimmed: boolean) => {
-  const width = Math.max(220, Math.floor(container.clientWidth || 220));
-  const height = Math.max(92, Math.floor(container.clientHeight || 92));
+  const width = Math.max(60, Math.floor(container.clientWidth || 220));
+  const height = Math.max(40, Math.floor(container.clientHeight || 92));
   const rule = layouts?.rules.get(name);
   if (!rule) {
     container.innerHTML = `

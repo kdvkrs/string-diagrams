@@ -12,7 +12,7 @@ export const viewForLayoutScale = (g: LayoutGraph, panel: Rect, scale: number): 
 });
 
 export const previewViewForLayout = (g: LayoutGraph, panel: Rect, zoomFactor: number, allowHorizontalOverflow: boolean): View => {
-  const pad = 14;
+  const pad = 8;
   const w = Math.max(1, g.width + pad * 2);
   const h = Math.max(1, g.height + pad * 2);
   const horizontalAllowance = allowHorizontalOverflow ? 2.2 : 1;
