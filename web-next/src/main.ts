@@ -140,33 +140,60 @@ const installKioskGestureGuards = () => {
 
 installKioskGestureGuards();
 
+const expertModeLabel = locale === 'de' ? 'Expertenmodus' : 'Expert mode';
+const expertModeDescription = locale === 'de' ? 'Bereich einkreisen statt Regel wählen' : 'Circle a region instead of choosing a rule';
+const moreOptionsLabel = locale === 'de' ? 'Mehr Optionen' : 'More options';
+
 app.innerHTML = `
   <header class="topbar">
-    <div class="left">
-      <label class="level-menu" aria-label="${t.choosePuzzleLevel}">
-        <span>${t.levelLabel}</span>
-        <select id="level-actions"></select>
-      </label>
-      <label class="level-menu locale-menu" aria-label="${t.chooseLanguage}">
-        <span>${t.languageLabel}</span>
+    <div class="tb-left">
+      <div class="tb-status" id="subtitle">
+        <span class="dot"></span>
+        <span id="subtitle-text"></span>
+      </div>
+      <div class="seg">
+        <button class="btn icon-btn" data-action="reset" aria-label="${t.reset}">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.662l3.181 3.181"/></svg>
+        </button>
+        <button class="btn icon-btn" data-action="undo" aria-label="${t.undo}">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
+        </button>
+        <button class="btn icon-btn" data-action="redo" aria-label="${t.redo}">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="tb-right">
+      <label class="lang-pick" aria-label="${t.chooseLanguage}">
+        <svg class="globe" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.6 2.4 15.4 0 18M12 3c-2.4 2.6-2.4 15.4 0 18"/></svg>
         <select id="locale-actions">
           ${supportedLocales.map((value) => `<option value="${value}"${value === locale ? ' selected' : ''}>${translations[value].languageName}</option>`).join('')}
         </select>
       </label>
-      <button class="btn" data-action="reset">${t.reset}</button>
-      <button class="btn icon-btn" data-action="undo" aria-label="${t.undo}">
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
-      </button>
-      <button class="btn icon-btn" data-action="redo" aria-label="${t.redo}">
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3"/></svg>
-      </button>
-      <button class="btn expert-toggle" data-action="expert-toggle" type="button" aria-pressed="false">Expert</button>
+      <button class="btn help-btn" data-action="help" aria-label="${t.showHelp}">?</button>
+      <details class="more">
+        <summary class="more-trigger" aria-label="${moreOptionsLabel}">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+        </summary>
+        <div class="more-pop">
+          <div class="more-section">
+            <span class="more-cap">${t.levelLabel}</span>
+            <label class="more-select" aria-label="${t.choosePuzzleLevel}">
+              <select id="level-actions"></select>
+            </label>
+          </div>
+          <button class="more-toggle expert-toggle" data-action="expert-toggle" type="button" aria-pressed="false" data-active="false">
+            <span class="more-toggle-main">
+              <span class="more-toggle-title">${expertModeLabel}</span>
+              <span class="more-toggle-sub">${expertModeDescription}</span>
+            </span>
+            <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+          </button>
+          <div class="more-sep"></div>
+          <button class="more-link" data-action="reset-demo" type="button">${t.resetDemo}</button>
+        </div>
+      </details>
     </div>
-    <div class="hint" id="subtitle">
-      <span class="dot"></span>
-      <span id="subtitle-text"></span>
-    </div>
-    <button class="btn help-btn" data-action="help" aria-label="${t.showHelp}">?</button>
   </header>
   <main class="stages">
     <div class="stage">
@@ -321,11 +348,6 @@ app.innerHTML = `
       <div class="rules" id="rules"></div>
       <div class="rules-scroll-cue" aria-hidden="true">${t.slideForMoreMoves}</div>
     </div>
-    <div class="move-counter" data-move-counter>
-      <b id="move-count">0</b> ${t.moves}<br/>
-      <span>${t.soFar}</span>
-    </div>
-    <button class="reset-demo-trigger" data-action="reset-demo" type="button">${t.resetDemo}</button>
   </footer>
 `;
 
@@ -371,7 +393,7 @@ const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="expert-toggle"]');
 if (
-  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !moveCountEl || !moveCounter || !successModal || !proofPanel || !helpPanel ||
+  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !proofPanel || !helpPanel ||
   !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
@@ -476,8 +498,8 @@ const resetShellState = () => {
   moveCount = 0;
   proofOpen = false;
   successOpen = false;
-  moveCountEl.textContent = '0';
-  moveCounter.removeAttribute('data-shown');
+  if (moveCountEl) moveCountEl.textContent = '0';
+  moveCounter?.removeAttribute('data-shown');
   successModal.removeAttribute('data-open');
   successModal.removeAttribute('data-final');
   proofPanel.removeAttribute('data-open');
@@ -634,8 +656,8 @@ if (perf.enabled) showPerfPanel();
 
 const bumpMoves = () => {
   moveCount += 1;
-  moveCountEl.textContent = String(moveCount);
-  moveCounter.setAttribute('data-shown', 'true');
+  if (moveCountEl) moveCountEl.textContent = String(moveCount);
+  moveCounter?.setAttribute('data-shown', 'true');
 };
 
 const fireConfetti = (finale = false) => {
