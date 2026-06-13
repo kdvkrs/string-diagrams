@@ -25,6 +25,7 @@ type AssistStep = {
   selectionDemo?: 'level-1-em';
   before?: 'select-level-1' | 'apply-level-1' | 'activate-level-1-rule' | 'apply-level-1-candidate';
   pulse?: 'level-1-rule';
+  pulseRuleName?: string;
   kicker: string;
   title: string;
   body: string;
@@ -51,6 +52,8 @@ type RuleDisplayItem = {
 
 const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
 const ASSIST_STAGE_SELECTOR = '.stage';
+const RULE_PREVIEW_WIDTH = 220;
+const RULE_PREVIEW_HEIGHT = 112;
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 
@@ -142,25 +145,48 @@ const ASSIST_STEPS_LEVEL_1_EASY: AssistStep[] = [
   }
 ];
 
-const ASSIST_STEPS_LEVEL_3: AssistStep[] = [
+const ASSIST_STEPS_LEVEL_3_EXPERT: AssistStep[] = [
   {
     selector: ASSIST_STAGE_SELECTOR,
     padding: 8,
     focusRect: 'rhs',
-    kicker: t.assist.level3[0].kicker,
-    title: t.assist.level3[0].title,
-    body: t.assist.level3[0].body,
+    kicker: t.assist.level3Expert[0].kicker,
+    title: t.assist.level3Expert[0].title,
+    body: t.assist.level3Expert[0].body,
     placement: 'left'
   }
 ];
 
-const ASSIST_STEPS_LEVEL_5: AssistStep[] = [
+const ASSIST_STEPS_LEVEL_3_EASY: AssistStep[] = [
   {
     selector: '#rules',
     padding: 8,
-    kicker: t.assist.level5[0].kicker,
-    title: t.assist.level5[0].title,
-    body: t.assist.level5[0].body,
+    kicker: t.assist.level3Easy[0].kicker,
+    title: t.assist.level3Easy[0].title,
+    body: t.assist.level3Easy[0].body,
+    placement: 'top'
+  }
+];
+
+const ASSIST_STEPS_LEVEL_5_EXPERT: AssistStep[] = [
+  {
+    selector: '#rules',
+    padding: 8,
+    kicker: t.assist.level5Expert[0].kicker,
+    title: t.assist.level5Expert[0].title,
+    body: t.assist.level5Expert[0].body,
+    placement: 'top'
+  }
+];
+
+const ASSIST_STEPS_LEVEL_5_EASY: AssistStep[] = [
+  {
+    selector: '.rule[data-rule-name="xyz"]',
+    padding: 8,
+    pulseRuleName: 'xyz',
+    kicker: t.assist.level5Easy[0].kicker,
+    title: t.assist.level5Easy[0].title,
+    body: t.assist.level5Easy[0].body,
     placement: 'top'
   }
 ];
@@ -206,7 +232,7 @@ app.innerHTML = `
       </div>
       <div class="seg">
         <button class="btn icon-btn" data-action="reset" aria-label="${t.reset}">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.662l3.181 3.181"/></svg>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
         </button>
         <button class="btn icon-btn" data-action="undo" aria-label="${t.undo}">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
@@ -469,13 +495,14 @@ const welcomeLocaleActions = document.querySelector<HTMLSelectElement>('#welcome
 const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
 const rulesContainer = document.querySelector<HTMLElement>('#rules');
 const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="expert-toggle"]');
+const moreMenu = document.querySelector<HTMLDetailsElement>('.more');
 if (
   !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !proofPanel || !helpPanel ||
   !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
   !perfPanel || !perfOutput ||
-  !levelActions || !localeActions || !welcomeLocaleActions || !rulesShell || !rulesContainer || !expertToggle
+  !levelActions || !localeActions || !welcomeLocaleActions || !rulesShell || !rulesContainer || !expertToggle || !moreMenu
 ) {
   throw new Error('Missing required UI element');
 }
@@ -1163,8 +1190,8 @@ const currentAssistSteps = () => {
   if (activePuzzleId === 'clean-up-two-units') {
     return expertMode ? ASSIST_STEPS_LEVEL_1_EXPERT : ASSIST_STEPS_LEVEL_1_EASY;
   }
-  if (activePuzzleId === 'both-sides-meet') return ASSIST_STEPS_LEVEL_3;
-  if (activePuzzleId === 'three-monad-composition') return ASSIST_STEPS_LEVEL_5;
+  if (activePuzzleId === 'both-sides-meet') return expertMode ? ASSIST_STEPS_LEVEL_3_EXPERT : ASSIST_STEPS_LEVEL_3_EASY;
+  if (activePuzzleId === 'three-monad-composition') return expertMode ? ASSIST_STEPS_LEVEL_5_EXPERT : ASSIST_STEPS_LEVEL_5_EASY;
   return [];
 };
 
@@ -1374,9 +1401,10 @@ const updateAssistRuleHighlight = (step: AssistStep) => {
   document
     .querySelectorAll('.rule.assist-rule-pulse, .rule.tut-hot')
     .forEach((el) => el.classList.remove('assist-rule-pulse', 'tut-hot'));
-  if (step.before !== 'select-level-1' && step.pulse !== 'level-1-rule') return;
+  if (step.before !== 'select-level-1' && step.pulse !== 'level-1-rule' && !step.pulseRuleName) return;
+  const ruleName = step.pulseRuleName ?? levelOneAssistRuleName;
   const rule = rulesContainer.querySelector<HTMLElement>(
-    `.rule[data-rule-name="${levelOneAssistRuleName}"], .rule[data-rule-names~="${levelOneAssistRuleName}"]`
+    `.rule[data-rule-name="${ruleName}"], .rule[data-rule-names~="${ruleName}"]`
   );
   if (!rule) return;
   rule.classList.add('tut-hot', 'assist-rule-pulse');
@@ -2166,23 +2194,25 @@ const evaluateSelection = (panels: PanelMap) => {
 };
 
 const rulePreviewSvg = (rule: { lhs: LayoutGraph; rhs: LayoutGraph }, width: number, height: number, dimmed: boolean) =>
-  rulePreviewSvgBase(rule, width, height, dimmed, { pinColor: cssVar('--pin', '#9aa8b8') });
+  rulePreviewSvgBase(rule, width, height, dimmed, expertMode
+    ? { pinColor: cssVar('--pin', '#9aa8b8') }
+    : {
+        pinColor: '#aeb7c2',
+        edgeColor: '#4f5a66',
+        nodeColor: '#8c95a1'
+      });
 
 const drawRulePreviewGraphs = (container: HTMLElement, rule: { lhs: LayoutGraph; rhs: LayoutGraph }, dimmed: boolean) => {
-  const width = Math.max(60, Math.floor(container.clientWidth || 220));
-  const height = Math.max(40, Math.floor(container.clientHeight || 92));
-  container.innerHTML = rulePreviewSvg(rule, width, height, dimmed);
+  container.innerHTML = rulePreviewSvg(rule, RULE_PREVIEW_WIDTH, RULE_PREVIEW_HEIGHT, dimmed);
 };
 
 const drawRulePreview = (container: HTMLElement, name: string, dimmed: boolean) => {
-  const width = Math.max(60, Math.floor(container.clientWidth || 220));
-  const height = Math.max(40, Math.floor(container.clientHeight || 92));
   const rule = layouts?.rules.get(name);
   if (!rule) {
     container.innerHTML = `
-      <svg class="rule-preview-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${t.rulePreviewLoading}" xmlns="http://www.w3.org/2000/svg">
-        <rect width="${width}" height="${height}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
-        <text x="${width * 0.5}" y="${height * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">${t.layoutLoading}</text>
+      <svg class="rule-preview-svg" viewBox="0 0 ${RULE_PREVIEW_WIDTH} ${RULE_PREVIEW_HEIGHT}" role="img" aria-label="${t.rulePreviewLoading}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${RULE_PREVIEW_WIDTH}" height="${RULE_PREVIEW_HEIGHT}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
+        <text x="${RULE_PREVIEW_WIDTH * 0.5}" y="${RULE_PREVIEW_HEIGHT * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">${t.layoutLoading}</text>
       </svg>
     `;
     return;
@@ -2233,13 +2263,13 @@ const canonicalRuleKey = (rule: SceneRule) => {
 
 const ruleFamilyLabel = (ruleNames: string[]) => {
   if (ruleNames.length > 0 && ruleNames.every((name) => ['mA', 'nA', 'mm', 'nn', 'oo'].includes(name))) {
-    return 'Fork reassociation';
+    return t.forkReassociation;
   }
   if (
     ruleNames.length > 0 &&
     ruleNames.every((name) => ['mx', 'nx', 'ny', 'oy', 'mz', 'oz'].includes(name))
   ) {
-    return 'Push fork through crossing';
+    return t.pushForkThroughCrossing;
   }
   return null;
 };
@@ -2323,6 +2353,7 @@ const refreshUi = () => {
   renderLevelButtons();
   syncModeControls();
   rulesContainer.dataset.selection = String(hasManualSelection);
+  rulesContainer.dataset.mode = interactionMode();
   const ruleKey = [
     activePuzzleId,
     layouts ? 'ready' : 'pending',
@@ -2365,7 +2396,7 @@ const refreshUi = () => {
             ? t.findMatchingRegions(item.label)
             : t.layoutLoading;
       btn.innerHTML = `
-        <div class="rule-meta"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
+        <div class="rule-meta" aria-hidden="${expertMode ? 'false' : 'true'}"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
         <div class="rule-preview" aria-hidden="true"></div>
       `;
       const nameEl = btn.querySelector<HTMLElement>('.rule-name');
@@ -2617,6 +2648,10 @@ const applyRuleFromButton = async (btn: HTMLButtonElement) => {
   });
 };
 
+const closeMoreMenu = () => {
+  moreMenu.open = false;
+};
+
 if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent !== 'undefined') {
   canvas.addEventListener('pointerdown', (e: PointerEvent) => {
     canvas.setPointerCapture(e.pointerId);
@@ -2714,6 +2749,7 @@ document.addEventListener('click', (e) => {
   const actionEl = (e.target as Element | null)?.closest<HTMLElement>('[data-action]');
   if (!actionEl) return;
   const action = actionEl.dataset.action;
+  if (actionEl.closest('.more-pop')) closeMoreMenu();
   if (action === 'reset' || action === 'play-again') {
     layoutStopRequested = true;
     releaseLayoutStep();
@@ -2797,6 +2833,7 @@ document.addEventListener('keydown', (e) => {
 }, true);
 
 levelActions.addEventListener('change', () => {
+  closeMoreMenu();
   loadPuzzle(levelActions.value || DEFAULT_PUZZLE_ID);
 });
 

@@ -25,6 +25,8 @@ export type Translations = {
   choosePuzzleLevel: string;
   chooseMode: string;
   chooseLanguage: string;
+  forkReassociation: string;
+  pushForkThroughCrossing: string;
   reset: string;
   undo: string;
   redo: string;
@@ -127,8 +129,10 @@ export type Translations = {
   assist: {
     level1: AssistStepCopy[];
     level1Easy: AssistStepCopy[];
-    level3: AssistStepCopy[];
-    level5: AssistStepCopy[];
+    level3Expert: AssistStepCopy[];
+    level3Easy: AssistStepCopy[];
+    level5Expert: AssistStepCopy[];
+    level5Easy: AssistStepCopy[];
   };
   puzzles: Record<string, PuzzleCopy>;
   graphSide: (side: string) => string;
@@ -149,6 +153,8 @@ const en: Translations = {
   choosePuzzleLevel: 'Choose puzzle level',
   chooseMode: 'Choose interaction mode',
   chooseLanguage: 'Choose language',
+  forkReassociation: 'Fork reassociation',
+  pushForkThroughCrossing: 'Push fork through crossing',
   reset: 'Reset',
   undo: 'Undo',
   redo: 'Redo',
@@ -298,18 +304,32 @@ const en: Translations = {
         body: 'Use the same rule again to make the left diagram match the right one.'
       }
     ],
-    level3: [
+    level3Expert: [
       {
         kicker: 'Hint',
         title: 'You can also transform the right side',
         body: 'In this level, you will have to manipulate both diagrams to get them to match.'
       }
     ],
-    level5: [
+    level3Easy: [
+      {
+        kicker: 'Hint',
+        title: 'Two familiar rules',
+        body: 'Both rule cards at the bottom are moves you have already used. Pick the one that exposes the next move.'
+      }
+    ],
+    level5Expert: [
       {
         kicker: 'Hint',
         title: 'More moves are available',
         body: 'The rule row scrolls sideways. In this level, slide the moves at the bottom to find the rule you need.'
+      }
+    ],
+    level5Easy: [
+      {
+        kicker: 'Hint',
+        title: 'One new rule',
+        body: 'This level adds one extra rule card. You will need it after the familiar fork moves.'
       }
     ]
   },
@@ -357,6 +377,8 @@ const de: Translations = {
   choosePuzzleLevel: 'Puzzle-Stufe wählen',
   chooseMode: 'Interaktionsmodus wählen',
   chooseLanguage: 'Sprache wählen',
+  forkReassociation: 'Gabel neu assoziieren',
+  pushForkThroughCrossing: 'Gabel durch Kreuzung schieben',
   reset: 'Zurücksetzen',
   undo: 'Rückgängig',
   redo: 'Wiederholen',
@@ -506,18 +528,32 @@ const de: Translations = {
         body: 'Nutze dieselbe Regel noch einmal, damit das linke Diagramm zum rechten passt.'
       }
     ],
-    level3: [
+    level3Expert: [
       {
         kicker: 'Hinweis',
         title: 'Du kannst auch die rechte Seite umformen',
         body: 'In dieser Stufe musst du beide Diagramme bearbeiten, damit sie übereinstimmen.'
       }
     ],
-    level5: [
+    level3Easy: [
+      {
+        kicker: 'Hinweis',
+        title: 'Zwei bekannte Regeln',
+        body: 'Die beiden Regelkarten unten kennst du schon aus den vorherigen Stufen. Wähle die Regel, die den nächsten Zug freilegt.'
+      }
+    ],
+    level5Expert: [
       {
         kicker: 'Hinweis',
         title: 'Es gibt mehr Züge',
         body: 'Die Regelzeile lässt sich seitlich scrollen. Wische in dieser Stufe unten durch die Züge, um die passende Regel zu finden.'
+      }
+    ],
+    level5Easy: [
+      {
+        kicker: 'Hinweis',
+        title: 'Eine neue Regel',
+        body: 'Diese Stufe fügt eine zusätzliche Regelkarte hinzu. Du wirst sie nach den bekannten Gabel-Zügen brauchen.'
       }
     ]
   },

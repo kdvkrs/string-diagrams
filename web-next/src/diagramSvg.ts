@@ -3,7 +3,14 @@ import type { LayoutGraph, LayoutNode, LayoutPoint } from './layout/layoutTypes'
 export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
 export type View = { scale: number; tx: number; ty: number };
-export type SvgOpts = { pinColor?: string; showLabels?: boolean; transparent?: boolean; nodeScale?: number };
+export type SvgOpts = {
+  pinColor?: string;
+  showLabels?: boolean;
+  transparent?: boolean;
+  nodeScale?: number;
+  nodeColor?: string;
+  edgeColor?: string;
+};
 
 export const viewForLayoutScale = (g: LayoutGraph, panel: Rect, scale: number): View => ({
   scale,
@@ -124,7 +131,7 @@ const svgSmoothPath = (points: Point[]) => {
 };
 
 const svgNode = (node: LayoutNode, view: View, opts: SvgOpts = {}) => {
-  const { pinColor = '#9aa8b8', showLabels = false, nodeScale = 1 } = opts;
+  const { pinColor = '#9aa8b8', showLabels = false, nodeScale = 1, nodeColor } = opts;
   const center = toScreen({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }, view);
   const minW = node.boundary ? 3 : Math.max(5, view.scale * 7);
   const minH = node.boundary ? 3 : Math.max(5, view.scale * 7);
@@ -137,7 +144,7 @@ const svgNode = (node: LayoutNode, view: View, opts: SvgOpts = {}) => {
     const r = Math.min(2.4, Math.max(1.5, Math.min(w, h) * 0.28));
     return `<circle cx="${center.x.toFixed(2)}" cy="${center.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${escAttr(pinColor)}" />`;
   }
-  const fill = escAttr(node.color || '#7f8c8d');
+  const fill = escAttr(nodeColor || node.color || '#7f8c8d');
   const stroke = '#243949';
   let shape: string;
   if (node.shape === 'circle' || node.shape === 'cross') {
@@ -165,7 +172,7 @@ export const svgGraphPreview = (graph: LayoutGraph, panel: Rect, opts?: SvgOpts)
     .map((edge) => {
       const d = svgSmoothPath(edge.points.map((p) => toScreen(p, view)));
       if (!d) return '';
-      return `<path d="${d}" fill="none" stroke="${escAttr(edge.color || '#2f4f67')}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />`;
+      return `<path d="${d}" fill="none" stroke="${escAttr(opts?.edgeColor || edge.color || '#2f4f67')}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />`;
     })
     .join('');
   const nodes = g.nodes.map((node) => svgNode(node, view, opts)).join('');
