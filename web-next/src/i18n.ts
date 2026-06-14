@@ -144,7 +144,7 @@ const plural = (count: number, singular: string, pluralText: string) => (count =
 
 const en: Translations = {
   locale: 'en',
-  appTitle: 'String Diagrams - Web Next',
+  appTitle: 'String Diagrams Proof Puzzle',
   rendererTitle: 'String Diagram Renderer',
   languageName: 'English',
   levelLabel: 'Level',
@@ -368,13 +368,13 @@ const en: Translations = {
 const de: Translations = {
   ...en,
   locale: 'de',
-  appTitle: 'String-Diagramme - Web Next',
+  appTitle: 'String-Diagramme - Beweis-Rätsel',
   rendererTitle: 'String-Diagramm-Renderer',
   languageName: 'Deutsch',
-  levelLabel: 'Stufe',
+  levelLabel: 'Level',
   modeLabel: 'Modus',
   languageLabel: 'Sprache',
-  choosePuzzleLevel: 'Puzzle-Stufe wählen',
+  choosePuzzleLevel: 'Puzzle-Level wählen',
   chooseMode: 'Interaktionsmodus wählen',
   chooseLanguage: 'Sprache wählen',
   forkReassociation: 'Gabel neu assoziieren',
@@ -389,14 +389,14 @@ const de: Translations = {
   successBodyHtml: 'Jeder deiner Züge folgte einer Regel.<br/>Ein Computer hat dein Argument gerade geprüft.',
   playAgain: 'Nochmal spielen',
   seeProof: 'Zeig den Beweis',
-  nextLevel: 'Nächste Stufe',
+  nextLevel: 'Nächstes Level',
   nextLabel: (level) => `Weiter: ${level}`,
   congratulations: 'Geschafft!',
   finalSuccessBody: 'Du hast alle Diagramme entwirrt und fünf maschinengeprüfte Beweise geschrieben.',
-  replayFinalLevel: 'Letzte Stufe erneut spielen',
+  replayFinalLevel: 'Letztes Level erneut spielen',
   proofKicker: 'Rocq-Beweisskript',
   yourProof: 'Dein Beweis',
-  proofExplainer: 'Jede Umformung kann als Schritt im Rocq-Theorembeweiser ausgedrückt werden.',
+  proofExplainer: 'Jede Umformung kann als Schritt im Rocq-Beweisassistenten ausgedrückt werden.',
   shareProof: 'Beweis teilen',
   howToPlay: 'So geht es',
   makeDiagramsMatch: 'Bring die Diagramme zur Deckung',
@@ -414,7 +414,7 @@ const de: Translations = {
   welcomeBody: 'Dein Ziel in diesem Puzzle ist es, beide Diagramme zur Deckung zu bringen.',
   startDemo: 'Demo starten',
   resetDemoTitle: 'Möchtest du wirklich von vorn beginnen?',
-  resetDemoBody: 'Das setzt die Demo auf Stufe 1 zurück und löscht den aktuellen Beweislauf.',
+  resetDemoBody: 'Das setzt die Demo auf Level 1 zurück und löscht den aktuellen Beweislauf.',
   cancel: 'Abbrechen',
   startOver: 'Von vorn beginnen',
   skip: 'Überspringen',
@@ -532,55 +532,55 @@ const de: Translations = {
       {
         kicker: 'Hinweis',
         title: 'Du kannst auch die rechte Seite umformen',
-        body: 'In dieser Stufe musst du beide Diagramme bearbeiten, damit sie übereinstimmen.'
+        body: 'In diesem Level musst du beide Diagramme bearbeiten, damit sie übereinstimmen.'
       }
     ],
     level3Easy: [
       {
         kicker: 'Hinweis',
         title: 'Zwei bekannte Regeln',
-        body: 'Die beiden Regelkarten unten kennst du schon aus den vorherigen Stufen. Wähle die Regel, die den nächsten Zug freilegt.'
+        body: 'Die beiden Regelkarten unten kennst du schon aus den vorherigen Levels. Wähle die Regel, die den nächsten Zug freilegt.'
       }
     ],
     level5Expert: [
       {
         kicker: 'Hinweis',
         title: 'Es gibt mehr Züge',
-        body: 'Die Regelzeile lässt sich seitlich scrollen. Wische in dieser Stufe unten durch die Züge, um die passende Regel zu finden.'
+        body: 'Die Regelzeile lässt sich seitlich scrollen. Wische in diesem Level unten durch die Züge, um die passende Regel zu finden.'
       }
     ],
     level5Easy: [
       {
         kicker: 'Hinweis',
         title: 'Eine neue Regel',
-        body: 'Diese Stufe fügt eine zusätzliche Regelkarte hinzu. Du wirst sie nach den bekannten Gabel-Zügen brauchen.'
+        body: 'Dieses Level fügt eine zusätzliche Regelkarte hinzu. Du wirst sie nach den bekannten Gabel-Zügen brauchen.'
       }
     ]
   },
   puzzles: {
     'clean-up-two-units': {
-      level: 'Stufe 1',
-      title: 'Stufe 1: Gabel neu assoziieren',
+      level: 'Level 1',
+      title: 'Level 1: Gabel neu assoziieren',
       subtitle: 'Nutze denselben Gabel-Zug zweimal. Beim ersten führe ich dich; den zweiten machst du.'
     },
     'composite-monad-left-unit': {
-      level: 'Stufe 2',
-      title: 'Stufe 2: Durch die Kreuzung schieben',
+      level: 'Level 2',
+      title: 'Level 2: Durch die Kreuzung schieben',
       subtitle: 'Schiebe eine Gabel durch eine Kreuzung und mach dann denselben Zug noch einmal.'
     },
     'both-sides-meet': {
-      level: 'Stufe 3',
-      title: 'Stufe 3: Kreuzung freilegen',
+      level: 'Level 3',
+      title: 'Level 3: Kreuzung freilegen',
       subtitle: 'Assoziiere zuerst die Gabel neu und schiebe sie dann durch die sichtbare Kreuzung.'
     },
     'composite-monad-associativity': {
-      level: 'Stufe 4',
-      title: 'Stufe 4: Die doppelte Gabel entwirren',
+      level: 'Level 4',
+      title: 'Level 4: Die doppelte Gabel entwirren',
       subtitle: 'Gabeln wandern durch Kreuzungen und werden dann neu assoziiert: dieselben lokalen Züge in einem größeren Diagramm.'
     },
     'three-monad-composition': {
-      level: 'Stufe 5',
-      title: 'Stufe 5: Drei-Farben-Bosslevel',
+      level: 'Level 5',
+      title: 'Level 5: Drei-Farben-Bosslevel',
       subtitle: 'Dasselbe Spiel auf einem größeren Feld: drei Drahtfarben, mehr Kreuzungen, dieselbe lokale Beweisidee.'
     }
   },
@@ -589,13 +589,13 @@ const de: Translations = {
     if (message === 'Demo loaded') return 'Demo geladen';
     if (message === 'You just made a proof. Every move was checked.') return 'Du hast gerade einen Beweis erstellt. Jeder Zug wurde geprüft.';
     const loaded = message.match(/^Level (\d+) loaded$/);
-    if (loaded) return `Stufe ${loaded[1]} geladen`;
+    if (loaded) return `Level ${loaded[1]} geladen`;
     const tutorial = message.match(/^Level (\d+) tutorial$/);
-    if (tutorial) return `Tutorial für Stufe ${tutorial[1]}`;
+    if (tutorial) return `Tutorial für Level ${tutorial[1]}`;
     const applied = message.match(/^Applied (.+) on (lhs|rhs)\.$/);
     if (applied) return `${applied[1]} auf der ${de.graphSide(applied[2])} angewendet.`;
     const unknown = message.match(/^Unknown puzzle "(.+)"; loaded Level (\d+) instead\.$/);
-    if (unknown) return `Unbekanntes Puzzle "${unknown[1]}"; stattdessen wurde Stufe ${unknown[2]} geladen.`;
+    if (unknown) return `Unbekanntes Puzzle "${unknown[1]}"; stattdessen wurde Level ${unknown[2]} geladen.`;
     return message;
   },
   reason: (reason) => {
