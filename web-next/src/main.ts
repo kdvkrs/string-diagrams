@@ -7,6 +7,7 @@ import { perf } from './perf';
 import {
   type Point,
   type Rect,
+  type SvgOpts,
   type View,
   toScreen,
   rulePreviewSvg as rulePreviewSvgBase,
@@ -2193,13 +2194,37 @@ const evaluateSelection = (panels: PanelMap) => {
   }
 };
 
+const sharedRulePreviewOpts = (): SvgOpts => ({
+  edgeStrokeWidth: 2.8,
+  nodeScale: 1.18,
+  triangleScale: 1.34,
+  previewZoom: 1.18
+});
+
 const rulePreviewSvg = (rule: { lhs: LayoutGraph; rhs: LayoutGraph }, width: number, height: number, dimmed: boolean) =>
   rulePreviewSvgBase(rule, width, height, dimmed, expertMode
-    ? { pinColor: cssVar('--pin', '#9aa8b8') }
+    ? { ...sharedRulePreviewOpts(), pinColor: cssVar('--pin', '#9aa8b8') }
     : {
-        pinColor: '#aeb7c2',
-        edgeColor: '#4f5a66',
-        nodeColor: '#8c95a1'
+        ...sharedRulePreviewOpts(),
+        pinColor: '#9aa3ad',
+        crossingFill: '#ffffff',
+        crossingStroke: '#111111',
+        nodeStroke: '#111111',
+        colorMap: {
+          '0,114,178': '#000000',
+          '0,115,179': '#000000',
+          '213,94,0': '#6a6a6a',
+          '214,94,0': '#6a6a6a',
+          '255,102,0': '#6a6a6a',
+          '0,102,102': '#767676',
+          '0,158,114': '#969696',
+          '0,158,115': '#969696',
+          '0,159,115': '#969696',
+          '239,226,66': '#bdbdbd',
+          '240,228,66': '#bdbdbd',
+          '204,25,25': '#252525',
+          '128,128,128': '#d0d0d0'
+        }
       });
 
 const drawRulePreviewGraphs = (container: HTMLElement, rule: { lhs: LayoutGraph; rhs: LayoutGraph }, dimmed: boolean) => {

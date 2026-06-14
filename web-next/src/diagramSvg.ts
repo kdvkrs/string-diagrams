@@ -10,6 +10,13 @@ export type SvgOpts = {
   nodeScale?: number;
   nodeColor?: string;
   edgeColor?: string;
+  edgeStrokeWidth?: number;
+  colorMap?: Record<string, string>;
+  crossingFill?: string;
+  crossingStroke?: string;
+  nodeStroke?: string;
+  triangleScale?: number;
+  previewZoom?: number;
 };
 
 export const viewForLayoutScale = (g: LayoutGraph, panel: Rect, scale: number): View => ({
@@ -107,6 +114,20 @@ export const spreadPreviewUnitTriangles = (g: LayoutGraph): LayoutGraph => {
 const escAttr = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+const colorKey = (value: string) => {
+  const rgba = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (rgba) return `${rgba[1]},${rgba[2]},${rgba[3]}`;
+  const hex = value.match(/^#([0-9a-f]{6})$/i);
+  if (!hex) return value.trim().toLowerCase();
+  const n = Number.parseInt(hex[1], 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+};
+
+const mappedColor = (value: string | undefined, fallback: string, opts?: SvgOpts) => {
+  const color = value || fallback;
+  return opts?.colorMap?.[colorKey(color)] || color;
+};
+
 const svgSmoothPath = (points: Point[]) => {
   if (points.length < 2) return '';
   const fmt = (n: number) => Number(n.toFixed(2));
@@ -135,7 +156,7 @@ const svgNode = (node: LayoutNode, view: View, opts: SvgOpts = {}) => {
   const center = toScreen({ x: node.x + node.w * 0.5, y: node.y + node.h * 0.5 }, view);
   const minW = node.boundary ? 3 : Math.max(5, view.scale * 7);
   const minH = node.boundary ? 3 : Math.max(5, view.scale * 7);
-  const scale = node.boundary ? 1 : nodeScale;
+  const scale = node.boundary ? 1 : nodeScale * (node.shape === 'triangle' ? opts.triangleScale ?? 1 : 1);
   const w = Math.max(minW, node.w * view.scale * 0.9) * scale;
   const h = Math.max(minH, node.h * view.scale * 0.9) * scale;
   const x = center.x - w * 0.5;
@@ -144,12 +165,15 @@ const svgNode = (node: LayoutNode, view: View, opts: SvgOpts = {}) => {
     const r = Math.min(2.4, Math.max(1.5, Math.min(w, h) * 0.28));
     return `<circle cx="${center.x.toFixed(2)}" cy="${center.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${escAttr(pinColor)}" />`;
   }
-  const fill = escAttr(nodeColor || node.color || '#7f8c8d');
-  const stroke = '#243949';
+  const fill = escAttr(nodeColor || mappedColor(node.color, '#7f8c8d', opts));
+  const isCrossing = node.shape === 'cross';
+  const stroke = opts.nodeStroke || '#243949';
+  const shapeFill = isCrossing && opts.crossingFill ? escAttr(opts.crossingFill) : fill;
+  const shapeStroke = isCrossing && opts.crossingStroke ? escAttr(opts.crossingStroke) : stroke;
   let shape: string;
   if (node.shape === 'circle' || node.shape === 'cross') {
     const r = Math.max(w, h) * 0.5;
-    shape = `<circle cx="${center.x.toFixed(2)}" cy="${center.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${fill}" stroke="${stroke}" stroke-width="0.75" />`;
+    shape = `<circle cx="${center.x.toFixed(2)}" cy="${center.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${shapeFill}" stroke="${shapeStroke}" stroke-width="0.75" />`;
   } else if (node.shape === 'triangle') {
     const pts = `${x.toFixed(2)},${y.toFixed(2)} ${(x + w).toFixed(2)},${y.toFixed(2)} ${(x + w * 0.5).toFixed(2)},${(y + h).toFixed(2)}`;
     shape = `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="0.75" />`;
@@ -166,13 +190,13 @@ const svgNode = (node: LayoutNode, view: View, opts: SvgOpts = {}) => {
 export const svgGraphPreview = (graph: LayoutGraph, panel: Rect, opts?: SvgOpts) => {
   const g = spreadPreviewUnitTriangles(graph);
   const hasZeroInput = g.nodes.some((node) => !node.boundary && node.shape === 'triangle' && node.inputs === 0);
-  const view = previewViewForLayout(g, panel, hasZeroInput ? 1.18 : 0.9, hasZeroInput);
+  const view = previewViewForLayout(g, panel, (hasZeroInput ? 1.18 : 0.9) * (opts?.previewZoom ?? 1), hasZeroInput);
   const clipId = `clip-${Math.random().toString(36).slice(2)}`;
   const edges = g.edges
     .map((edge) => {
       const d = svgSmoothPath(edge.points.map((p) => toScreen(p, view)));
       if (!d) return '';
-      return `<path d="${d}" fill="none" stroke="${escAttr(opts?.edgeColor || edge.color || '#2f4f67')}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />`;
+      return `<path d="${d}" fill="none" stroke="${escAttr(opts?.edgeColor || mappedColor(edge.color, '#2f4f67', opts))}" stroke-width="${opts?.edgeStrokeWidth ?? 1.9}" stroke-linecap="round" stroke-linejoin="round" />`;
     })
     .join('');
   const nodes = g.nodes.map((node) => svgNode(node, view, opts)).join('');
@@ -192,8 +216,8 @@ export const termPreviewSvg = (graph: LayoutGraph, width: number, height: number
 };
 
 export const rulePreviewSvg = (rule: { lhs: LayoutGraph; rhs: LayoutGraph }, width: number, height: number, dimmed: boolean, opts?: SvgOpts) => {
-  const gutter = 30;
-  const pad = 5;
+  const gutter = 22;
+  const pad = 2;
   const hasZeroInput = [...rule.lhs.nodes, ...rule.rhs.nodes].some((node) => !node.boundary && node.shape === 'triangle');
   const verticalInset = hasZeroInput ? -7 : 0;
   const sideW = (width - gutter - pad * 2) * 0.5;
