@@ -801,8 +801,9 @@ const fireConfetti = (finale = false) => {
   if (!c) return;
   const rect = successModal.getBoundingClientRect();
   const width = Math.max(window.innerWidth, document.documentElement.clientWidth || 0, rect.width, 1);
-  const height = Math.max(window.innerHeight, document.documentElement.clientHeight || 0, rect.height, 1);
-  const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+  const viewportHeight = Math.max(window.innerHeight, document.documentElement.clientHeight || 0, rect.height, 1);
+  const height = Math.min(viewportHeight, 460);
+  const dpr = clamp(window.devicePixelRatio || 1, 1, 1.25);
   confettiCanvas.width = Math.floor(width * dpr);
   confettiCanvas.height = Math.floor(height * dpr);
   confettiCanvas.style.width = `${width}px`;
@@ -815,38 +816,60 @@ const fireConfetti = (finale = false) => {
     cssVar('--node-o', '#f0e442'),
     cssVar('--node-x', '#009e73')
   ];
-  const duration = finale ? 9000 : 4200;
+  const duration = finale ? 5200 : 2600;
   const started = Date.now();
   let lastBurst = 0;
+  const maxBits = finale ? 170 : 105;
   type ConfettiBit = {
     x: number;
     y: number;
     vx: number;
     vy: number;
     g: number;
-    r: number;
-    vr: number;
-    size: number;
+    w: number;
+    h: number;
     color: string;
     life: number;
     maxLife: number;
   };
   const bits: ConfettiBit[] = [];
   const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
-  const burst = (originX: number, originY: number, count: number) => {
-    for (let i = 0; i < count; i += 1) {
-      const angle = randomInRange(-Math.PI * 0.9, -Math.PI * 0.1);
-      const speed = randomInRange(2.2, 7.8);
-      const life = randomInRange(110, 170);
-      bits.push({
+  const addBit = (bit: ConfettiBit) => {
+    if (bits.length < maxBits) bits.push(bit);
+  };
+  const burst = (originX: number, originY: number, count: number, spread = 1) => {
+    const room = Math.max(0, maxBits - bits.length);
+    for (let i = 0; i < Math.min(count, room); i += 1) {
+      const angle = randomInRange(-Math.PI * (0.95 * spread), -Math.PI * (0.05 + (1 - spread) * 0.25));
+      const speed = randomInRange(2.4, finale ? 8.2 : 7);
+      const life = randomInRange(58, finale ? 116 : 96);
+      const size = randomInRange(finale ? 5 : 4.5, finale ? 12 : 10);
+      addBit({
         x: originX,
         y: originY,
         vx: Math.cos(angle) * speed + randomInRange(-0.8, 0.8),
         vy: Math.sin(angle) * speed - randomInRange(0.2, 1.8),
         g: randomInRange(0.08, 0.14),
-        r: Math.random() * Math.PI,
-        vr: randomInRange(-0.32, 0.32),
-        size: randomInRange(3.5, 8),
+        w: size,
+        h: Math.random() > 0.38 ? size * 0.32 : size,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life,
+        maxLife: life
+      });
+    }
+  };
+  const rain = (count: number) => {
+    for (let i = 0; i < count && bits.length < maxBits; i += 1) {
+      const size = randomInRange(4, 9);
+      const life = randomInRange(80, 132);
+      addBit({
+        x: randomInRange(width * 0.08, width * 0.92),
+        y: randomInRange(-28, 10),
+        vx: randomInRange(-0.45, 0.45),
+        vy: randomInRange(1.8, 3.1),
+        g: randomInRange(0.035, 0.065),
+        w: size,
+        h: size * 0.36,
         color: colors[Math.floor(Math.random() * colors.length)],
         life,
         maxLife: life
@@ -856,16 +879,26 @@ const fireConfetti = (finale = false) => {
   const tick = () => {
     const elapsed = Date.now() - started;
     const timeLeft = Math.max(0, duration - elapsed);
-    if (elapsed - lastBurst > 220 && timeLeft > 0) {
+    if (elapsed - lastBurst > 320 && timeLeft > 0) {
       lastBurst = elapsed;
-      const particleCount = Math.max(finale ? 8 : 5, Math.floor((finale ? 34 : 24) * (timeLeft / duration)));
-      burst(width * randomInRange(0.08, 0.32), height * randomInRange(-0.04, 0.18), particleCount);
-      burst(width * randomInRange(0.68, 0.92), height * randomInRange(-0.04, 0.18), particleCount);
+      const particleCount = Math.max(finale ? 5 : 3, Math.floor((finale ? 16 : 11) * (timeLeft / duration)));
+      burst(width * randomInRange(0.08, 0.28), height * randomInRange(-0.03, 0.16), particleCount, 0.92);
+      burst(width * randomInRange(0.72, 0.92), height * randomInRange(-0.03, 0.16), particleCount, 0.92);
       if (finale && elapsed < duration * 0.7) {
-        burst(width * randomInRange(0.32, 0.68), height * randomInRange(0.02, 0.28), Math.max(3, Math.floor(particleCount * 0.45)));
+        rain(8);
+        burst(width * randomInRange(0.32, 0.68), height * randomInRange(0.02, 0.24), Math.max(2, Math.floor(particleCount * 0.45)), 0.72);
       }
     }
     c.clearRect(0, 0, width, height);
+    const flash = Math.max(0, 1 - elapsed / (finale ? 760 : 520));
+    if (flash > 0) {
+      c.globalAlpha = flash * 0.34;
+      c.fillStyle = '#ffffff';
+      c.beginPath();
+      c.arc(width * 0.5, height * 0.24, (1 - flash) * (finale ? 180 : 120) + 22, 0, Math.PI * 2);
+      c.fill();
+      c.globalAlpha = 1;
+    }
     for (let i = bits.length - 1; i >= 0; i -= 1) {
       const bit = bits[i];
       if (bit.life <= 0) {
@@ -876,25 +909,22 @@ const fireConfetti = (finale = false) => {
       bit.x += bit.vx;
       bit.y += bit.vy;
       bit.vy += bit.g;
-      bit.r += bit.vr;
       if (bit.life <= 0 || bit.y > height + 80) {
         bits.splice(i, 1);
         continue;
       }
-      c.save();
-      c.translate(bit.x, bit.y);
-      c.rotate(bit.r);
       c.fillStyle = bit.color;
       c.globalAlpha = Math.min(1, bit.life / Math.min(22, bit.maxLife * 0.6));
-      c.fillRect(-bit.size * 0.5, -bit.size * 0.5, bit.size, bit.size * 0.65);
-      c.restore();
+      c.fillRect(bit.x - bit.w * 0.5, bit.y - bit.h * 0.5, bit.w, bit.h);
     }
+    c.globalAlpha = 1;
     if (timeLeft > 0 || bits.length > 0) requestAnimationFrame(tick);
     else c.clearRect(0, 0, width, height);
   };
-  burst(width * 0.5, height * 0.24, finale ? 130 : 76);
-  burst(width * 0.25, height * 0.1, finale ? 54 : 28);
-  burst(width * 0.75, height * 0.1, finale ? 54 : 28);
+  burst(width * 0.5, height * 0.24, finale ? 70 : 42, 0.72);
+  burst(width * 0.2, height * 0.12, finale ? 28 : 16, 0.9);
+  burst(width * 0.8, height * 0.12, finale ? 28 : 16, 0.9);
+  if (finale) rain(26);
   tick();
 };
 

@@ -1142,6 +1142,11 @@ body.tut-on .stage::after {
   display: grid;
 }
 
+#success-modal {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .modal,
 .proof-card,
 .help-card,
@@ -1333,7 +1338,7 @@ body.tut-on .stage::after {
   inset: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 0;
+  z-index: 3;
   pointer-events: none;
 }
 
