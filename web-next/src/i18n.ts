@@ -294,7 +294,7 @@ const en: Translations = {
       {
         kicker: 'Step 1 of 4',
         title: 'Pick a rule first',
-        body: 'Tap the Fork reassociation card. The app will show every place where that move fits.'
+        body: 'Tap the highlighted rule card. The app will show every place where that move fits.'
       },
       {
         kicker: 'Step 2 of 4',
@@ -309,7 +309,7 @@ const en: Translations = {
       {
         kicker: 'Step 4 of 4',
         title: 'Now you try',
-        body: 'Use the same rule again to make the left diagram match the right one.'
+        body: 'Use the same local move again to make the left diagram match the right one.'
       }
     ],
     level3Expert: [
@@ -522,7 +522,7 @@ const de: Translations = {
       {
         kicker: 'Schritt 1 von 4',
         title: 'Wähle zuerst eine Regel',
-        body: 'Tippe auf die Karte „Gabel neu assoziieren“. Die App zeigt dir alle passenden Stellen.'
+        body: 'Tippe auf die hervorgehobene Regelkarte. Die App zeigt dir alle passenden Stellen.'
       },
       {
         kicker: 'Schritt 2 von 4',
@@ -537,7 +537,7 @@ const de: Translations = {
       {
         kicker: 'Schritt 4 von 4',
         title: 'Jetzt bist du dran',
-        body: 'Nutze dieselbe Regel noch einmal, damit das linke Diagramm zum rechten passt.'
+        body: 'Nutze denselben lokalen Zug noch einmal, damit das linke Diagramm zum rechten passt.'
       }
     ],
     level3Expert: [

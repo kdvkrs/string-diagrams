@@ -57,6 +57,7 @@ const BONUS_PUZZLE_ID = 'three-monad-composition';
 const ASSIST_STAGE_SELECTOR = '.stage';
 const RULE_PREVIEW_WIDTH = 220;
 const RULE_PREVIEW_HEIGHT = 112;
+const GUIDED_REWRITE_PUZZLE_IDS = new Set(['composite-monad-left-unit', 'clean-up-two-units']);
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 
@@ -1163,9 +1164,9 @@ const startTutorial = async () => {
 };
 
 const ensureLevelOneAssistSelection = () => {
-  if (activePuzzleId !== 'clean-up-two-units') return;
+  if (!GUIDED_REWRITE_PUZZLE_IDS.has(activePuzzleId)) return;
   if (!levelOneAssistSelection) {
-    const demo = adapter.tutorialDemo(DEFAULT_PUZZLE_ID);
+    const demo = adapter.tutorialDemo(activePuzzleId);
     if (demo.ok && demo.selection && demo.ruleName) {
       levelOneAssistSelection = {
         ...demo.selection,
@@ -1193,13 +1194,13 @@ const selectLevelOneAssistTangle = () => {
 };
 
 const getLevelOneAssistSelection = () => {
-  if (activePuzzleId !== 'clean-up-two-units') return null;
+  if (!GUIDED_REWRITE_PUZZLE_IDS.has(activePuzzleId)) return null;
   ensureLevelOneAssistSelection();
   return levelOneAssistSelection;
 };
 
 const applyLevelOneAssistRule = async () => {
-  if (activePuzzleId !== 'clean-up-two-units' || levelOneAssistApplied) return;
+  if (!GUIDED_REWRITE_PUZZLE_IDS.has(activePuzzleId) || levelOneAssistApplied) return;
   selectLevelOneAssistTangle();
   if (!levelOneAssistSelection) return;
   const selection = {
@@ -1239,7 +1240,7 @@ const levelOneEasyCandidate = () => {
 };
 
 const applyLevelOneEasyCandidate = async () => {
-  if (activePuzzleId !== 'clean-up-two-units' || levelOneAssistApplied) return;
+  if (!GUIDED_REWRITE_PUZZLE_IDS.has(activePuzzleId) || levelOneAssistApplied) return;
   const candidate = levelOneEasyCandidate();
   if (!candidate) return;
   levelOneAssistApplied = true;
@@ -1247,7 +1248,7 @@ const applyLevelOneEasyCandidate = async () => {
 };
 
 const currentAssistSteps = () => {
-  if (activePuzzleId === 'clean-up-two-units') {
+  if (GUIDED_REWRITE_PUZZLE_IDS.has(activePuzzleId)) {
     return expertMode ? ASSIST_STEPS_LEVEL_1_EXPERT : ASSIST_STEPS_LEVEL_1_EASY;
   }
   if (activePuzzleId === 'both-sides-meet') return expertMode ? ASSIST_STEPS_LEVEL_3_EXPERT : ASSIST_STEPS_LEVEL_3_EASY;
@@ -1462,6 +1463,7 @@ const updateAssistRuleHighlight = (step: AssistStep) => {
     .querySelectorAll('.rule.assist-rule-pulse, .rule.tut-hot')
     .forEach((el) => el.classList.remove('assist-rule-pulse', 'tut-hot'));
   if (step.before !== 'select-level-1' && step.pulse !== 'level-1-rule' && !step.pulseRuleName) return;
+  if (step.before === 'select-level-1' || step.pulse === 'level-1-rule') ensureLevelOneAssistSelection();
   const ruleName = step.pulseRuleName ?? levelOneAssistRuleName;
   const rule = rulesContainer.querySelector<HTMLElement>(
     `.rule[data-rule-name="${ruleName}"], .rule[data-rule-names~="${ruleName}"]`
@@ -1546,7 +1548,7 @@ const maybeStartAssist = () => {
   const steps = currentAssistSteps();
   if (steps.length === 0) return;
   window.setTimeout(() => {
-    if (activePuzzleId === 'clean-up-two-units' && !tutorialRunning && !proofOpen && !successOpen) {
+    if (activePuzzleId === DEFAULT_PUZZLE_ID && !tutorialRunning && !proofOpen && !successOpen) {
       assistWelcomePanel.setAttribute('data-open', 'true');
     } else {
       startAssist();
