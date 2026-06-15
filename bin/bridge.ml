@@ -47,6 +47,8 @@ let mu3_state =
 
 let fork_reassociation_state =
   "m: M⊗M -> M\n\
+   x: N⊗M -> M⊗N\n\
+   mx: N·m ; x = x·M ; M·x ; m·N\n\
    mA: m·M ; m = M·m ; m\n\
    ------\n\
    m·M·M ; m·M ; m = M·m·M ; M·m ; m"
@@ -92,7 +94,7 @@ let puzzles = [
     title = "Level 2: Fork Reassociation";
     subtitle = "Use the same fork reassociation move twice.";
     source = fork_reassociation_state;
-    visible_rules = Some ["mA"];
+    visible_rules = Some ["mx"; "mA"];
   };
   {
     id = "both-sides-meet";
