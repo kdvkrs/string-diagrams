@@ -57,7 +57,7 @@ const BONUS_PUZZLE_ID = 'three-monad-composition';
 const ASSIST_STAGE_SELECTOR = '.stage';
 const RULE_PREVIEW_WIDTH = 220;
 const RULE_PREVIEW_HEIGHT = 112;
-const GUIDED_REWRITE_PUZZLE_IDS = new Set(['composite-monad-left-unit', 'clean-up-two-units']);
+const GUIDED_REWRITE_PUZZLE_IDS = new Set(['composite-monad-left-unit']);
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 
@@ -274,6 +274,7 @@ app.innerHTML = `
           </button>
           <div class="more-sep"></div>
           <button class="more-link" data-action="credits" type="button">${t.credits}</button>
+          <div class="more-sep"></div>
           <button class="more-link" data-action="reset-demo" type="button">${t.resetDemo}</button>
         </div>
       </details>
@@ -300,13 +301,12 @@ app.innerHTML = `
       <div class="modal modal--end">
         <div class="modal-check" aria-hidden="true">★</div>
         <div class="modal-title">${t.congratulations}</div>
-        <div class="modal-body">
+        <div class="modal-body" id="success-final-body">
           ${t.finalSuccessBody}
         </div>
         <div class="modal-actions">
           <button class="btn" data-action="play-again">${t.replayFinalLevel}</button>
           <button class="btn btn--primary" data-action="see-proof">${t.seeProof}</button>
-          <button class="btn btn--primary" id="success-bonus-action" data-action="bonus-level">${t.bonusLevel}</button>
         </div>
       </div>
     </div>
@@ -478,7 +478,7 @@ const proofPrimaryAction = document.querySelector<HTMLButtonElement>('#proof-pri
 const moveCountEl = document.querySelector<HTMLElement>('#move-count');
 const moveCounter = document.querySelector<HTMLElement>('[data-move-counter]');
 const successModal = document.querySelector<HTMLElement>('#success-modal');
-const successBonusAction = document.querySelector<HTMLButtonElement>('#success-bonus-action');
+const successFinalBody = document.querySelector<HTMLElement>('#success-final-body');
 const proofPanel = document.querySelector<HTMLElement>('#proof-panel');
 const helpPanel = document.querySelector<HTMLElement>('#help-panel');
 const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
@@ -514,7 +514,7 @@ const rulesContainer = document.querySelector<HTMLElement>('#rules');
 const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="expert-toggle"]');
 const moreMenu = document.querySelector<HTMLDetailsElement>('.more');
 if (
-  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !successBonusAction || !proofPanel || !helpPanel ||
+  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !successFinalBody || !proofPanel || !helpPanel ||
   !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !creditsPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
@@ -1037,9 +1037,8 @@ const showSuccess = () => {
   const nextButton = successModal.querySelector<HTMLButtonElement>('[data-action="next-level"]');
   const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
   const hasNext = hasMainNextPuzzle();
-  const showBonus = isOfficialFinalPuzzle();
   successModal.toggleAttribute('data-final', !hasNext);
-  successBonusAction.hidden = !showBonus;
+  successFinalBody.innerHTML = isBonusPuzzle() ? t.bonusSuccessBody : t.finalSuccessBody;
   if (nextButton) {
     nextButton.hidden = !hasNext;
     nextButton.textContent = hasNext ? t.nextLabel(puzzles[idx + 1].level) : t.nextLevel;
@@ -2194,7 +2193,7 @@ const drawCandidateHighlights = (panels: PanelMap) => {
     ctx.lineWidth = 2.4;
     ctx.setLineDash([7, 5]);
     roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 12);
-    if (!ambiguous) ctx.fill();
+    ctx.fill();
     ctx.stroke();
   });
   if (ambiguous) {

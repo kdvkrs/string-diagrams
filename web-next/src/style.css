@@ -1194,6 +1194,16 @@ body.tut-on .stage::after {
   font: 400 14.5px/1.5 var(--font);
 }
 
+.modal-body a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.modal-body a:hover {
+  text-decoration: underline;
+}
+
 .assist-welcome-card {
   box-sizing: border-box;
   width: min(900px, calc(100vw - 40px));

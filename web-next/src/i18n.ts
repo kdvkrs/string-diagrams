@@ -42,6 +42,7 @@ export type Translations = {
   nextLabel: (level: string) => string;
   congratulations: string;
   finalSuccessBody: string;
+  bonusSuccessBody: string;
   replayFinalLevel: string;
   proofKicker: string;
   yourProof: string;
@@ -176,6 +177,7 @@ const en: Translations = {
   nextLabel: (level) => `Next: ${level}`,
   congratulations: 'Congratulations!',
   finalSuccessBody: 'You completed the main proof path and wrote four machine-checked proofs. There is one bonus challenge if you want it.',
+  bonusSuccessBody: 'You solved the bonus challenge as well. That one was deliberately harder than the main path.',
   replayFinalLevel: 'Replay final level',
   proofKicker: 'Rocq proof script',
   yourProof: 'Your proof',
@@ -209,7 +211,7 @@ const en: Translations = {
   resetDemo: 'Reset demo',
   credits: 'Credits',
   creditsTitle: 'Credits',
-  creditsBodyHtml: 'This demo was built by Klaus as a playful proof puzzle for string diagrams.<br/>It is inspired by Damien’s original string diagram tool.',
+  creditsBodyHtml: 'String Diagrams Proof Puzzle is an outreach prototype by <a href="https://github.com/kdvkrs/string-diagrams" target="_blank" rel="noreferrer">Klaus Kraßnitzer</a>.<br/><br/>It is based on and inspired by <a href="https://github.com/damien-pous/string-diagrams" target="_blank" rel="noreferrer">Damien Pous’ original string-diagrams project</a>, including its diagram editor, mathematical ideas, and Rocq/proof-oriented workflow.<br/><br/>This fork is an unofficial tablet-friendly demo for Open Campus / science-fair-style outreach, not a replacement for the upstream research editor.',
   slideForMoreMoves: 'slide for more moves',
   proofFor: (title) => `Your proof for ${title}`,
   noProofYet: 'No proof yet.',
@@ -406,6 +408,7 @@ const de: Translations = {
   nextLabel: (level) => `Weiter: ${level}`,
   congratulations: 'Geschafft!',
   finalSuccessBody: 'Du hast den Hauptweg abgeschlossen und vier maschinengeprüfte Beweise geschrieben. Wenn du möchtest, wartet noch eine Bonus-Aufgabe.',
+  bonusSuccessBody: 'Du hast auch die Bonus-Aufgabe gelöst. Die war absichtlich schwieriger als der Hauptweg.',
   replayFinalLevel: 'Letztes Level erneut spielen',
   proofKicker: 'Rocq-Beweisskript',
   yourProof: 'Dein Beweis',
@@ -439,7 +442,7 @@ const de: Translations = {
   resetDemo: 'Demo zurücksetzen',
   credits: 'Credits',
   creditsTitle: 'Credits',
-  creditsBodyHtml: 'Diese Demo wurde von Klaus als spielerisches Beweis-Puzzle für String-Diagramme gebaut.<br/>Sie ist von Damiens ursprünglichem String-Diagramm-Werkzeug inspiriert.',
+  creditsBodyHtml: 'String Diagrams Proof Puzzle ist ein Outreach-Prototyp von <a href="https://github.com/kdvkrs/string-diagrams" target="_blank" rel="noreferrer">Klaus Kraßnitzer</a>.<br/><br/>Er basiert auf und ist inspiriert von <a href="https://github.com/damien-pous/string-diagrams" target="_blank" rel="noreferrer">Damien Pous’ ursprünglichem string-diagrams-Projekt</a>, inklusive Diagramm-Editor, mathematischer Ideen und Rocq-/Beweis-Workflow.<br/><br/>Dieser Fork ist eine inoffizielle tabletfreundliche Demo für Open-Campus- und Science-Fair-Outreach, kein Ersatz für den upstream Forschungseditor.',
   slideForMoreMoves: 'seitlich wischen für mehr Züge',
   proofFor: (title) => `Dein Beweis für ${title}`,
   noProofYet: 'Noch kein Beweis.',
