@@ -38,6 +38,7 @@ export type Translations = {
   playAgain: string;
   seeProof: string;
   nextLevel: string;
+  bonusLevel: string;
   nextLabel: (level: string) => string;
   congratulations: string;
   finalSuccessBody: string;
@@ -169,9 +170,10 @@ const en: Translations = {
   playAgain: 'Play again',
   seeProof: 'See what you did',
   nextLevel: 'Next level',
+  bonusLevel: 'Bonus level',
   nextLabel: (level) => `Next: ${level}`,
   congratulations: 'Congratulations!',
-  finalSuccessBody: 'You untangled all diagrams and wrote five machine-checked proofs.',
+  finalSuccessBody: 'You completed the main proof path and wrote four machine-checked proofs. There is one bonus challenge if you want it.',
   replayFinalLevel: 'Replay final level',
   proofKicker: 'Rocq proof script',
   yourProof: 'Your proof',
@@ -362,8 +364,8 @@ const en: Translations = {
     },
     'three-monad-composition': {
       level: 'Level 5',
-      title: 'Level 5: Three-Color Boss Level',
-      subtitle: 'Same game, larger board: three colors of wires, more crossings, same local proof idea.'
+      title: 'Bonus Level: Three-Color Boss Level',
+      subtitle: 'Optional bonus challenge: three colors of wires, more crossings, same local proof idea.'
     }
   },
   graphSide: (side) => (side === 'rhs' ? 'right side' : side === 'lhs' ? 'left side' : side),
@@ -396,9 +398,10 @@ const de: Translations = {
   playAgain: 'Nochmal spielen',
   seeProof: 'Zeig den Beweis',
   nextLevel: 'Nächstes Level',
+  bonusLevel: 'Bonus-Level',
   nextLabel: (level) => `Weiter: ${level}`,
   congratulations: 'Geschafft!',
-  finalSuccessBody: 'Du hast alle Diagramme entwirrt und fünf maschinengeprüfte Beweise geschrieben.',
+  finalSuccessBody: 'Du hast den Hauptweg abgeschlossen und vier maschinengeprüfte Beweise geschrieben. Wenn du möchtest, wartet noch eine Bonus-Aufgabe.',
   replayFinalLevel: 'Letztes Level erneut spielen',
   proofKicker: 'Rocq-Beweisskript',
   yourProof: 'Dein Beweis',
@@ -589,8 +592,8 @@ const de: Translations = {
     },
     'three-monad-composition': {
       level: 'Level 5',
-      title: 'Level 5: Drei-Farben-Bosslevel',
-      subtitle: 'Dasselbe Spiel auf einem größeren Feld: drei Drahtfarben, mehr Kreuzungen, dieselbe lokale Beweisidee.'
+      title: 'Bonus-Level: Drei-Farben-Bosslevel',
+      subtitle: 'Optionale Bonus-Aufgabe: drei Drahtfarben, mehr Kreuzungen, dieselbe lokale Beweisidee.'
     }
   },
   graphSide: (side) => (side === 'rhs' ? 'rechten Seite' : side === 'lhs' ? 'linken Seite' : side),

@@ -52,6 +52,8 @@ type RuleDisplayItem = {
 };
 
 const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
+const OFFICIAL_FINAL_PUZZLE_ID = 'composite-monad-associativity';
+const BONUS_PUZZLE_ID = 'three-monad-composition';
 const ASSIST_STAGE_SELECTOR = '.stage';
 const RULE_PREVIEW_WIDTH = 220;
 const RULE_PREVIEW_HEIGHT = 112;
@@ -303,6 +305,7 @@ app.innerHTML = `
         <div class="modal-actions">
           <button class="btn" data-action="play-again">${t.replayFinalLevel}</button>
           <button class="btn btn--primary" data-action="see-proof">${t.seeProof}</button>
+          <button class="btn btn--primary" id="success-bonus-action" data-action="bonus-level">${t.bonusLevel}</button>
         </div>
       </div>
     </div>
@@ -474,6 +477,7 @@ const proofPrimaryAction = document.querySelector<HTMLButtonElement>('#proof-pri
 const moveCountEl = document.querySelector<HTMLElement>('#move-count');
 const moveCounter = document.querySelector<HTMLElement>('[data-move-counter]');
 const successModal = document.querySelector<HTMLElement>('#success-modal');
+const successBonusAction = document.querySelector<HTMLButtonElement>('#success-bonus-action');
 const proofPanel = document.querySelector<HTMLElement>('#proof-panel');
 const helpPanel = document.querySelector<HTMLElement>('#help-panel');
 const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
@@ -509,7 +513,7 @@ const rulesContainer = document.querySelector<HTMLElement>('#rules');
 const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="expert-toggle"]');
 const moreMenu = document.querySelector<HTMLDetailsElement>('.more');
 if (
-  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !proofPanel || !helpPanel ||
+  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !successBonusAction || !proofPanel || !helpPanel ||
   !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !creditsPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
@@ -725,6 +729,18 @@ const nextPuzzleId = () => {
   if (idx < 0 || puzzles.length === 0) return DEFAULT_PUZZLE_ID;
   return puzzles[(idx + 1) % puzzles.length].id;
 };
+
+const puzzleIndex = (puzzleId: string) => puzzles.findIndex((p) => p.id === puzzleId);
+
+const hasMainNextPuzzle = () => {
+  const idx = puzzleIndex(activePuzzleId);
+  const finalIdx = puzzleIndex(OFFICIAL_FINAL_PUZZLE_ID);
+  return idx >= 0 && finalIdx >= 0 && idx < finalIdx;
+};
+
+const isOfficialFinalPuzzle = () => activePuzzleId === OFFICIAL_FINAL_PUZZLE_ID;
+
+const isBonusPuzzle = () => activePuzzleId === BONUS_PUZZLE_ID;
 
 const loadPuzzle = (puzzleId: string) => {
   stopTutorial();
@@ -1017,14 +1033,16 @@ const showSuccess = () => {
   successOpen = true;
   const nextButton = successModal.querySelector<HTMLButtonElement>('[data-action="next-level"]');
   const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
-  const hasNext = idx >= 0 && idx < puzzles.length - 1;
+  const hasNext = hasMainNextPuzzle();
+  const showBonus = isOfficialFinalPuzzle();
   successModal.toggleAttribute('data-final', !hasNext);
+  successBonusAction.hidden = !showBonus;
   if (nextButton) {
     nextButton.hidden = !hasNext;
     nextButton.textContent = hasNext ? t.nextLabel(puzzles[idx + 1].level) : t.nextLevel;
   }
   successModal.setAttribute('data-open', 'true');
-  fireConfetti(!hasNext);
+  fireConfetti(!hasNext || isBonusPuzzle());
 };
 
 const showProof = () => {
@@ -1032,11 +1050,10 @@ const showProof = () => {
   successModal.removeAttribute('data-open');
   proofPanel.setAttribute('data-open', 'true');
   const puzzle = puzzles.find((p) => p.id === activePuzzleId);
-  const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
-  const hasNext = idx >= 0 && idx < puzzles.length - 1;
+  const hasNext = hasMainNextPuzzle();
   proofTitle.textContent = t.proofFor(puzzle ? displayPuzzleTitle(puzzle) : scene.title);
-  proofPrimaryAction.textContent = hasNext ? t.nextLevel : t.close;
-  proofPrimaryAction.dataset.action = hasNext ? 'next-level' : 'close-proof';
+  proofPrimaryAction.textContent = isOfficialFinalPuzzle() ? t.bonusLevel : hasNext ? t.nextLevel : t.close;
+  proofPrimaryAction.dataset.action = isOfficialFinalPuzzle() ? 'bonus-level' : hasNext ? 'next-level' : 'close-proof';
   proof.innerHTML = highlightRocq(currentProofText());
   setProofShareStatus('');
 };
@@ -2828,6 +2845,8 @@ document.addEventListener('click', (e) => {
     loadPuzzle(actionEl.dataset.puzzleId || DEFAULT_PUZZLE_ID);
   } else if (action === 'next-level') {
     loadPuzzle(nextPuzzleId());
+  } else if (action === 'bonus-level') {
+    loadPuzzle(BONUS_PUZZLE_ID);
   } else if (action === 'undo') {
     layoutStopRequested = true;
     releaseLayoutStep();
