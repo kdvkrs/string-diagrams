@@ -572,6 +572,7 @@ const initialInteractionMode: InteractionMode = storedMode === 'expert' ? 'exper
 let currentSelection: SelectionDescriptor = emptySelection();
 let expertMode = initialInteractionMode === 'expert';
 let activeRuleMatches: ActiveRuleMatchSet = null;
+let ambiguousRuleMatches: ActiveRuleMatchSet = null;
 let lasso: Point[] = [];
 let dragging = false;
 let zoom = 1;
@@ -722,6 +723,7 @@ const invalidateRuleDock = () => {
 
 const clearActiveRuleMatches = () => {
   activeRuleMatches = null;
+  ambiguousRuleMatches = null;
   invalidateRuleDock();
 };
 
@@ -1825,6 +1827,7 @@ const setScene = (nextScene: SceneState) => {
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
   activeRuleMatches = null;
+  ambiguousRuleMatches = null;
   invalidateRuleDock();
   void layoutScene(scene);
 };
@@ -2145,28 +2148,70 @@ const candidateRect = (candidate: RuleCandidate, panels: PanelMap): Rect | null 
   return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
 };
 
-const pickCandidateAt = (p: Point, panels: PanelMap): RuleCandidate | null => {
-  if (!activeRuleMatches) return null;
-  return activeRuleMatches.candidates
+const candidateHitsAt = (p: Point, panels: PanelMap, candidates: RuleCandidate[]) =>
+  candidates
     .map((candidate) => ({ candidate, rect: candidateRect(candidate, panels) }))
     .filter((entry): entry is { candidate: RuleCandidate; rect: Rect } => Boolean(entry.rect && inPanel(p, entry.rect)))
-    .sort((a, b) => (a.rect.w * a.rect.h) - (b.rect.w * b.rect.h))[0]?.candidate ?? null;
+    .sort((a, b) => (a.rect.w * a.rect.h) - (b.rect.w * b.rect.h));
+
+const setAmbiguousRuleMatches = (candidates: RuleCandidate[]) => {
+  if (!activeRuleMatches) return;
+  ambiguousRuleMatches = {
+    ...activeRuleMatches,
+    candidates
+  };
+  scene.messages = [t.ambiguousRuleCandidates];
+  showSelectionFeedback(t.ambiguousRuleCandidatesFeedback);
+};
+
+const clearAmbiguousRuleMatches = () => {
+  if (!ambiguousRuleMatches) return;
+  ambiguousRuleMatches = null;
+  if (activeRuleMatches) scene.messages = [t.matchingRegionsForRule(activeRuleMatches.candidates.length, activeRuleMatches.label)];
+  hideSelectionFeedback();
+};
+
+const rectIntersection = (a: Rect, b: Rect): Rect | null => {
+  const x0 = Math.max(a.x, b.x);
+  const y0 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.w, b.x + b.w);
+  const y1 = Math.min(a.y + a.h, b.y + b.h);
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
 };
 
 const drawCandidateHighlights = (panels: PanelMap) => {
   if (!activeRuleMatches) return;
+  const displayMatches = ambiguousRuleMatches ?? activeRuleMatches;
+  const ambiguous = Boolean(ambiguousRuleMatches);
   ctx.save();
-  activeRuleMatches.candidates.forEach((candidate) => {
+  const rects: Rect[] = [];
+  displayMatches.candidates.forEach((candidate) => {
     const rect = candidateRect(candidate, panels);
     if (!rect) return;
+    rects.push(rect);
     ctx.fillStyle = candidate.direction === 'forward' ? 'rgba(59, 115, 196, 0.14)' : 'rgba(111, 168, 106, 0.16)';
     ctx.strokeStyle = candidate.direction === 'forward' ? '#3b73c4' : '#5b9a55';
     ctx.lineWidth = 2.4;
     ctx.setLineDash([7, 5]);
     roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 12);
-    ctx.fill();
+    if (!ambiguous) ctx.fill();
     ctx.stroke();
   });
+  if (ambiguous) {
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(20, 30, 45, 0.08)';
+    ctx.strokeStyle = 'rgba(20, 30, 45, 0.18)';
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < rects.length; i += 1) {
+      for (let j = i + 1; j < rects.length; j += 1) {
+        const overlap = rectIntersection(rects[i], rects[j]);
+        if (!overlap) continue;
+        roundedRectPath(ctx, overlap.x, overlap.y, overlap.w, overlap.h, 8);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
   ctx.restore();
 };
 
@@ -2430,7 +2475,9 @@ const refreshUi = () => {
   const hasManualSelection = expertMode && hasSelection;
   const hasEnabledRule = rules.some((r) => r.enabled);
   const displayItems = ruleDisplayItems();
-  subtitle.textContent = activeRuleMatches
+  subtitle.textContent = ambiguousRuleMatches
+    ? t.ambiguousRuleCandidates
+    : activeRuleMatches
     ? t.matchingRegionsForRule(activeRuleMatches.candidates.length, activeRuleMatches.label)
     : hasManualSelection && hasEnabledRule
     ? t.selectedPiecesPrompt(currentSelection.selectedNodeIds.length)
@@ -2445,6 +2492,7 @@ const refreshUi = () => {
     layouts ? 'ready' : 'pending',
     expertMode ? 'expert' : 'rule-first',
     activeRuleMatches ? `${activeRuleMatches.key}:${activeRuleMatches.candidates.length}` : 'no-active-rule',
+    ambiguousRuleMatches ? `${ambiguousRuleMatches.key}:${ambiguousRuleMatches.candidates.map(candidateKey).join('+')}` : 'no-ambiguous-rule',
     scene.rules.map((r) => r.name).join(','),
     displayItems.map((item) => `${item.key}:${item.label}:${item.ruleNames.join('+')}`).join(','),
     rules.map((r) => `${r.name}:${r.enabled ? 1 : 0}:${r.reason ?? ''}`).join(',')
@@ -2646,6 +2694,7 @@ const clearManualSelection = () => {
   lasso = [];
   currentSelection = emptySelection();
   rules = disabledRulesFor(scene, t.selectSubDiagram);
+  ambiguousRuleMatches = null;
 };
 
 const selectionFromCandidate = (candidate: RuleCandidate): SelectionDescriptor => ({
@@ -2693,10 +2742,12 @@ const activateRuleCandidates = (item: { key: string; label: string; ruleNames: s
   });
   if (candidates.length === 0) {
     activeRuleMatches = null;
+    ambiguousRuleMatches = null;
     scene.messages = [t.noRuleCandidates(item.label)];
     showSelectionFeedback(t.noRuleCandidatesFeedback);
   } else {
     activeRuleMatches = { key: item.key, label: item.label, ruleNames: item.ruleNames, candidates };
+    ambiguousRuleMatches = null;
     scene.messages = [t.matchingRegionsForRule(candidates.length, item.label)];
     hideSelectionFeedback();
   }
@@ -2707,6 +2758,35 @@ const activateRuleCandidates = (item: { key: string; label: string; ruleNames: s
 const applyCandidate = async (candidate: RuleCandidate) => {
   if (!activeRuleMatches) return;
   await applyRuleToSelection(candidate.ruleName, selectionFromCandidate(candidate));
+};
+
+const handleRuleCandidateTap = async (p: Point, panels: PanelMap) => {
+  if (!activeRuleMatches) return;
+  if (ambiguousRuleMatches) {
+    const hits = candidateHitsAt(p, panels, ambiguousRuleMatches.candidates);
+    if (hits.length === 0) {
+      clearAmbiguousRuleMatches();
+      render();
+      return;
+    }
+    if (hits.length === 1) {
+      ambiguousRuleMatches = null;
+      await applyCandidate(hits[0].candidate);
+      return;
+    }
+    setAmbiguousRuleMatches(hits.map((hit) => hit.candidate));
+    render();
+    return;
+  }
+
+  const hits = candidateHitsAt(p, panels, activeRuleMatches.candidates);
+  if (hits.length === 0) return;
+  if (hits.length === 1) {
+    await applyCandidate(hits[0].candidate);
+    return;
+  }
+  setAmbiguousRuleMatches(hits.map((hit) => hit.candidate));
+  render();
 };
 
 const candidateKey = (candidate: RuleCandidate) =>
@@ -2745,8 +2825,7 @@ if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).Pointer
     if (!expertMode) {
       const rect = canvas.getBoundingClientRect();
       const panels = panelsForSize(Math.max(1, Math.floor(rect.width)), Math.max(1, Math.floor(rect.height)));
-      const candidate = pickCandidateAt(p, panels);
-      if (candidate) void applyCandidate(candidate);
+      void handleRuleCandidateTap(p, panels);
       return;
     }
     startDrag(p);
@@ -2760,8 +2839,7 @@ if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).Pointer
     if (!expertMode) {
       const rect = canvas.getBoundingClientRect();
       const panels = panelsForSize(Math.max(1, Math.floor(rect.width)), Math.max(1, Math.floor(rect.height)));
-      const candidate = pickCandidateAt(p, panels);
-      if (candidate) void applyCandidate(candidate);
+      void handleRuleCandidateTap(p, panels);
       return;
     }
     startDrag(p);
@@ -2777,8 +2855,7 @@ if (typeof (window as unknown as { PointerEvent?: typeof PointerEvent }).Pointer
       if (!expertMode) {
         const rect = canvas.getBoundingClientRect();
         const panels = panelsForSize(Math.max(1, Math.floor(rect.width)), Math.max(1, Math.floor(rect.height)));
-        const candidate = pickCandidateAt(p, panels);
-        if (candidate) void applyCandidate(candidate);
+        void handleRuleCandidateTap(p, panels);
         e.preventDefault();
         return;
       }

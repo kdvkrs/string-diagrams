@@ -104,6 +104,8 @@ export type Translations = {
   noRuleCandidates: (ruleName: string) => string;
   noRuleCandidatesFeedback: string;
   matchingRegionsForRule: (count: number, ruleName: string) => string;
+  ambiguousRuleCandidates: string;
+  ambiguousRuleCandidatesFeedback: string;
   selectionSummary: (side: string, count: number) => string;
   rulePreviewLoading: string;
   layoutLoading: string;
@@ -241,6 +243,8 @@ const en: Translations = {
   noRuleCandidates: (ruleName) => `No highlighted regions for ${ruleName}.`,
   noRuleCandidatesFeedback: 'That rule does not apply right now. Try another rule.',
   matchingRegionsForRule: (count, ruleName) => `${count} highlighted region${count === 1 ? '' : 's'} for ${ruleName}.`,
+  ambiguousRuleCandidates: 'Those regions overlap. Tap a non-overlapping part of the region you want.',
+  ambiguousRuleCandidatesFeedback: 'Ambiguous spot. Tap one of the separated parts.',
   selectionSummary: (side, count) => `Selection on ${side}: ${count} ${plural(count, 'node', 'nodes')}. Applicable rules highlighted.`,
   rulePreviewLoading: 'rewrite rule preview loading',
   layoutLoading: 'layout...',
@@ -469,6 +473,8 @@ const de: Translations = {
   noRuleCandidates: (ruleName) => `Keine markierte Stelle für ${ruleName}.`,
   noRuleCandidatesFeedback: 'Diese Regel passt gerade nirgends. Versuche eine andere Regel.',
   matchingRegionsForRule: (count, ruleName) => `${count} markierte ${plural(count, 'Stelle', 'Stellen')} für ${ruleName}.`,
+  ambiguousRuleCandidates: 'Diese Bereiche überlappen. Tippe auf einen nicht überlappenden Teil der gewünschten Stelle.',
+  ambiguousRuleCandidatesFeedback: 'Mehrdeutige Stelle. Tippe auf einen getrennten Teil.',
   selectionSummary: (side, count) => `Auswahl auf der ${side}: ${count} ${plural(count, 'Knoten', 'Knoten')}. Anwendbare Regeln sind hervorgehoben.`,
   rulePreviewLoading: 'Vorschau der Umschreiberegel wird geladen',
   layoutLoading: 'Layout...',
