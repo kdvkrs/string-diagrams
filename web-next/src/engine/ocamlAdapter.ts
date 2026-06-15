@@ -31,20 +31,20 @@ declare global {
   }
 }
 
-const DEFAULT_DEMO = 'clean-up-two-units';
+const DEFAULT_DEMO = 'composite-monad-left-unit';
 
 const fallbackPuzzles: PuzzleInfo[] = [
   {
-    id: 'clean-up-two-units',
+    id: 'composite-monad-left-unit',
     level: 'Level 1',
-    title: 'Level 1: Fork Reassociation',
-    subtitle: 'Use the same fork reassociation move twice. I’ll guide the first one; you finish the second.'
+    title: 'Level 1: Push Through Crossing',
+    subtitle: 'Push a fork through one crossing, then do it again.'
   },
   {
-    id: 'composite-monad-left-unit',
+    id: 'clean-up-two-units',
     level: 'Level 2',
-    title: 'Level 2: Push Through Crossing',
-    subtitle: 'Push a fork through one crossing, then do it again.'
+    title: 'Level 2: Fork Reassociation',
+    subtitle: 'Use the same fork reassociation move twice. I’ll guide the first one; you finish the second.'
   },
   {
     id: 'both-sides-meet',

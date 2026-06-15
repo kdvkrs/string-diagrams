@@ -51,7 +51,7 @@ type RuleDisplayItem = {
   rules: SceneRule[];
 };
 
-const DEFAULT_PUZZLE_ID = 'clean-up-two-units';
+const DEFAULT_PUZZLE_ID = 'composite-monad-left-unit';
 const OFFICIAL_FINAL_PUZZLE_ID = 'composite-monad-associativity';
 const BONUS_PUZZLE_ID = 'three-monad-composition';
 const ASSIST_STAGE_SELECTOR = '.stage';

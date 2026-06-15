@@ -79,20 +79,20 @@ type puzzle = {
 
 let puzzles = [
   {
-    id = "clean-up-two-units";
-    level = "Level 1";
-    title = "Level 1: Fork Reassociation";
-    subtitle = "Use the same fork reassociation move twice. I’ll guide the first one; you finish the second.";
-    source = fork_reassociation_state;
-    visible_rules = Some ["mA"];
-  };
-  {
     id = "composite-monad-left-unit";
-    level = "Level 2";
-    title = "Level 2: Push Through Crossing";
+    level = "Level 1";
+    title = "Level 1: Push Through Crossing";
     subtitle = "Push a fork through one crossing, then do it again.";
     source = push_through_state;
     visible_rules = Some ["mx"];
+  };
+  {
+    id = "clean-up-two-units";
+    level = "Level 2";
+    title = "Level 2: Fork Reassociation";
+    subtitle = "Use the same fork reassociation move twice. I’ll guide the first one; you finish the second.";
+    source = fork_reassociation_state;
+    visible_rules = Some ["mA"];
   };
   {
     id = "both-sides-meet";
@@ -120,7 +120,7 @@ let puzzles = [
   };
 ]
 
-let default_puzzle_id = "clean-up-two-units"
+let default_puzzle_id = "composite-monad-left-unit"
 
 let puzzle_by_id id =
   match List.find_opt (fun p -> p.id = id) puzzles with

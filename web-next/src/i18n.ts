@@ -342,15 +342,15 @@ const en: Translations = {
     ]
   },
   puzzles: {
-    'clean-up-two-units': {
-      level: 'Level 1',
-      title: 'Level 1: Fork Reassociation',
-      subtitle: "Use the same fork reassociation move twice. I'll guide the first one; you finish the second."
-    },
     'composite-monad-left-unit': {
-      level: 'Level 2',
-      title: 'Level 2: Push Through Crossing',
+      level: 'Level 1',
+      title: 'Level 1: Push Through Crossing',
       subtitle: 'Push a fork through one crossing, then do it again.'
+    },
+    'clean-up-two-units': {
+      level: 'Level 2',
+      title: 'Level 2: Fork Reassociation',
+      subtitle: "Use the same fork reassociation move twice. I'll guide the first one; you finish the second."
     },
     'both-sides-meet': {
       level: 'Level 3',
@@ -570,15 +570,15 @@ const de: Translations = {
     ]
   },
   puzzles: {
-    'clean-up-two-units': {
-      level: 'Level 1',
-      title: 'Level 1: Gabel neu assoziieren',
-      subtitle: 'Nutze denselben Gabel-Zug zweimal. Beim ersten führe ich dich; den zweiten machst du.'
-    },
     'composite-monad-left-unit': {
-      level: 'Level 2',
-      title: 'Level 2: Durch die Kreuzung schieben',
+      level: 'Level 1',
+      title: 'Level 1: Durch die Kreuzung schieben',
       subtitle: 'Schiebe eine Gabel durch eine Kreuzung und mach dann denselben Zug noch einmal.'
+    },
+    'clean-up-two-units': {
+      level: 'Level 2',
+      title: 'Level 2: Gabel neu assoziieren',
+      subtitle: 'Nutze denselben Gabel-Zug zweimal. Beim ersten führe ich dich; den zweiten machst du.'
     },
     'both-sides-meet': {
       level: 'Level 3',
