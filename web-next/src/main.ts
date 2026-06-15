@@ -270,6 +270,7 @@ app.innerHTML = `
             <span class="switch" aria-hidden="true"><span class="knob"></span></span>
           </button>
           <div class="more-sep"></div>
+          <button class="more-link" data-action="credits" type="button">${t.credits}</button>
           <button class="more-link" data-action="reset-demo" type="button">${t.resetDemo}</button>
         </div>
       </details>
@@ -396,6 +397,15 @@ app.innerHTML = `
         </div>
       </div>
     </div>
+    <div id="credits-panel" role="dialog" aria-modal="true" aria-labelledby="credits-title">
+      <div class="modal reset-demo-card">
+        <div class="modal-title" id="credits-title">${t.creditsTitle}</div>
+        <div class="modal-body">${t.creditsBodyHtml}</div>
+        <div class="modal-actions">
+          <button class="btn btn--primary" data-action="close-credits">${t.close}</button>
+        </div>
+      </div>
+    </div>
   </main>
   <div class="tut-root" id="tutorial-root" aria-hidden="true" hidden>
     <svg class="tut-veil" id="tutorial-veil" preserveAspectRatio="none">
@@ -469,6 +479,7 @@ const helpPanel = document.querySelector<HTMLElement>('#help-panel');
 const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
 const assistWelcomePanel = document.querySelector<HTMLElement>('#assist-welcome-panel');
 const resetDemoPanel = document.querySelector<HTMLElement>('#reset-demo-panel');
+const creditsPanel = document.querySelector<HTMLElement>('#credits-panel');
 const tutorialCanvas = document.querySelector<HTMLCanvasElement>('#tutorial-stage');
 const tutorialRuleCard = document.querySelector<HTMLButtonElement>('#tutorial-rule-card');
 const tutorialRulePreview = document.querySelector<HTMLElement>('#tutorial-rule-preview');
@@ -499,7 +510,7 @@ const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="ex
 const moreMenu = document.querySelector<HTMLDetailsElement>('.more');
 if (
   !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !proofPanel || !helpPanel ||
-  !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
+  !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !creditsPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
   !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
   !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
   !perfPanel || !perfOutput ||
@@ -643,6 +654,7 @@ const resetShellState = () => {
   tutorialPanel.removeAttribute('data-open');
   assistWelcomePanel.removeAttribute('data-open');
   resetDemoPanel.removeAttribute('data-open');
+  creditsPanel.removeAttribute('data-open');
   stopTutorial();
   stopAssist();
 };
@@ -2858,6 +2870,10 @@ document.addEventListener('click', (e) => {
     stopAssist();
   } else if (action === 'assist-start') {
     void startAssistFromWelcome();
+  } else if (action === 'credits') {
+    creditsPanel.setAttribute('data-open', 'true');
+  } else if (action === 'close-credits') {
+    creditsPanel.removeAttribute('data-open');
   } else if (action === 'reset-demo') {
     resetDemoPanel.setAttribute('data-open', 'true');
   } else if (action === 'cancel-reset-demo') {

@@ -67,6 +67,9 @@ export type Translations = {
   moves: string;
   soFar: string;
   resetDemo: string;
+  credits: string;
+  creditsTitle: string;
+  creditsBodyHtml: string;
   slideForMoreMoves: string;
   proofFor: (title: string) => string;
   noProofYet: string;
@@ -200,6 +203,9 @@ const en: Translations = {
   moves: 'moves',
   soFar: 'so far',
   resetDemo: 'Reset demo',
+  credits: 'Credits',
+  creditsTitle: 'Credits',
+  creditsBodyHtml: 'This demo was built by Klaus as a playful proof puzzle for string diagrams.<br/>It is inspired by Damien’s original string diagram tool.',
   slideForMoreMoves: 'slide for more moves',
   proofFor: (title) => `Your proof for ${title}`,
   noProofYet: 'No proof yet.',
@@ -424,6 +430,9 @@ const de: Translations = {
   moves: 'Züge',
   soFar: 'bisher',
   resetDemo: 'Demo zurücksetzen',
+  credits: 'Credits',
+  creditsTitle: 'Credits',
+  creditsBodyHtml: 'Diese Demo wurde von Klaus als spielerisches Beweis-Puzzle für String-Diagramme gebaut.<br/>Sie ist von Damiens ursprünglichem String-Diagramm-Werkzeug inspiriert.',
   slideForMoreMoves: 'seitlich wischen für mehr Züge',
   proofFor: (title) => `Dein Beweis für ${title}`,
   noProofYet: 'Noch kein Beweis.',

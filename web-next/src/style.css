@@ -1122,7 +1122,8 @@ body.tut-on .stage::after {
 #help-panel,
 #tutorial-panel,
 #assist-welcome-panel,
-#reset-demo-panel {
+#reset-demo-panel,
+#credits-panel {
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -1138,7 +1139,8 @@ body.tut-on .stage::after {
 #help-panel[data-open="true"],
 #tutorial-panel[data-open="true"],
 #assist-welcome-panel[data-open="true"],
-#reset-demo-panel[data-open="true"] {
+#reset-demo-panel[data-open="true"],
+#credits-panel[data-open="true"] {
   display: grid;
 }
 
