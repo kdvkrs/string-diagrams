@@ -176,6 +176,18 @@ const ASSIST_STEPS_LEVEL_1_EASY: AssistStep[] = [
   }
 ];
 
+const ASSIST_STEPS_LEVEL_2_EASY: AssistStep[] = [
+  {
+    selector: '.rule[data-rule-name="mA"]',
+    padding: 8,
+    pulseRuleName: 'mA',
+    kicker: t.assist.level2Easy[0].kicker,
+    title: t.assist.level2Easy[0].title,
+    body: t.assist.level2Easy[0].body,
+    placement: 'top'
+  }
+];
+
 const ASSIST_STEPS_LEVEL_3_EXPERT: AssistStep[] = [
   {
     selector: ASSIST_STAGE_SELECTOR,
@@ -580,6 +592,9 @@ let layouts: LayoutState | null = null;
 const fallbackRulePreviewCache = new Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>();
 const fallbackRulePreviewLoading = new Set<string>();
 let layoutEpoch = 0;
+let sceneRevision = 0;
+let easyCandidateCountCacheKey = '';
+let easyCandidateCountCache = new Map<string, number>();
 let activePuzzleId = scene.puzzleId || DEFAULT_PUZZLE_ID;
 const disabledRulesFor = (s: SceneState, reason = t.reason('No selection')): RuleAvailability[] =>
   s.rules.map((rule) => ({ name: rule.name, enabled: false, reason }));
@@ -748,6 +763,11 @@ const stopAssist = () => {
 
 const invalidateRuleDock = () => {
   renderedRulesKey = '';
+};
+
+const invalidateEasyCandidateCounts = () => {
+  easyCandidateCountCacheKey = '';
+  easyCandidateCountCache = new Map();
 };
 
 const clearActiveRuleMatches = () => {
@@ -1287,6 +1307,7 @@ const currentAssistSteps = () => {
   if (GUIDED_REWRITE_PUZZLE_IDS.has(activePuzzleId)) {
     return expertMode ? ASSIST_STEPS_LEVEL_1_EXPERT : ASSIST_STEPS_LEVEL_1_EASY;
   }
+  if (activePuzzleId === 'clean-up-two-units' && !expertMode) return ASSIST_STEPS_LEVEL_2_EASY;
   if (activePuzzleId === 'both-sides-meet') return expertMode ? ASSIST_STEPS_LEVEL_3_EXPERT : ASSIST_STEPS_LEVEL_3_EASY;
   if (activePuzzleId === 'three-monad-composition') return expertMode ? ASSIST_STEPS_LEVEL_5_EXPERT : ASSIST_STEPS_LEVEL_5_EASY;
   return [];
@@ -1784,8 +1805,10 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
   const localizedNextScene = localizeScene(nextScene);
   const finalMessages = [...localizedNextScene.messages];
   scene = localizedNextScene;
+  sceneRevision += 1;
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
+  invalidateEasyCandidateCounts();
   invalidateRuleDock();
   layoutStopRequested = false;
   const nextGraphs = new Map<string, LayoutGraph>();
@@ -1858,10 +1881,12 @@ const animateRewriteScene = async (nextScene: SceneState, graphId: string, seed?
 
 const setScene = (nextScene: SceneState) => {
   scene = localizeScene(nextScene);
+  sceneRevision += 1;
   activePuzzleId = scene.puzzleId || activePuzzleId;
   rules = disabledRulesFor(scene);
   activeRuleMatches = null;
   ambiguousRuleMatches = null;
+  invalidateEasyCandidateCounts();
   invalidateRuleDock();
   void layoutScene(scene);
 };
@@ -2555,12 +2580,23 @@ const updateRuleScrollState = () => {
 };
 
 const easyCandidateCounts = (items: RuleDisplayItem[]) => {
-  const counts = new Map<string, number>();
-  if (expertMode || !layouts || currentSelection.selectedNodeIds.length > 0) return counts;
-  items.forEach((item) => {
-    const count = item.ruleNames.reduce((sum, ruleName) => sum + adapter.ruleCandidates(ruleName).length, 0);
-    counts.set(item.key, count);
+  if (expertMode || !layouts || currentSelection.selectedNodeIds.length > 0) return new Map<string, number>();
+  const key = [
+    sceneRevision,
+    activePuzzleId,
+    items.map((item) => `${item.key}:${item.ruleNames.join('+')}`).join(',')
+  ].join('|');
+  if (key === easyCandidateCountCacheKey) return easyCandidateCountCache;
+  const counts = perf.time('easy.ruleCandidateCounts', () => {
+    const nextCounts = new Map<string, number>();
+    items.forEach((item) => {
+      const count = item.ruleNames.reduce((sum, ruleName) => sum + adapter.ruleCandidates(ruleName).length, 0);
+      nextCounts.set(item.key, count);
+    });
+    return nextCounts;
   });
+  easyCandidateCountCacheKey = key;
+  easyCandidateCountCache = counts;
   return counts;
 };
 

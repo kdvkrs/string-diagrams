@@ -136,6 +136,7 @@ export type Translations = {
   assist: {
     level1: AssistStepCopy[];
     level1Easy: AssistStepCopy[];
+    level2Easy: AssistStepCopy[];
     level3Expert: AssistStepCopy[];
     level3Easy: AssistStepCopy[];
     level5Expert: AssistStepCopy[];
@@ -316,6 +317,13 @@ const en: Translations = {
         kicker: 'Step 4 of 4',
         title: 'Now you try',
         body: 'Use the same local move again to make the left diagram match the right one.'
+      }
+    ],
+    level2Easy: [
+      {
+        kicker: 'New rule',
+        title: 'Fork reassociation',
+        body: 'This level adds the fork reassociation rule. Tap the new rule card to see where it applies.'
       }
     ],
     level3Expert: [
@@ -547,6 +555,13 @@ const de: Translations = {
         kicker: 'Schritt 4 von 4',
         title: 'Jetzt bist du dran',
         body: 'Nutze denselben lokalen Zug noch einmal, damit das linke Diagramm zum rechten passt.'
+      }
+    ],
+    level2Easy: [
+      {
+        kicker: 'Neue Regel',
+        title: 'Gabel neu assoziieren',
+        body: 'In diesem Level kommt die Gabel-Regel dazu. Tippe auf die neue Regelkarte, um ihre passenden Stellen zu sehen.'
       }
     ],
     level3Expert: [
