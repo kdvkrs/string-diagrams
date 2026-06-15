@@ -2238,35 +2238,63 @@ const rectIntersection = (a: Rect, b: Rect): Rect | null => {
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
 };
 
+const subtractRect = (base: Rect, cut: Rect): Rect[] => {
+  const overlap = rectIntersection(base, cut);
+  if (!overlap) return [base];
+  const pieces: Rect[] = [];
+  const baseRight = base.x + base.w;
+  const baseBottom = base.y + base.h;
+  const overlapRight = overlap.x + overlap.w;
+  const overlapBottom = overlap.y + overlap.h;
+  if (overlap.y > base.y) pieces.push({ x: base.x, y: base.y, w: base.w, h: overlap.y - base.y });
+  if (overlapBottom < baseBottom) pieces.push({ x: base.x, y: overlapBottom, w: base.w, h: baseBottom - overlapBottom });
+  if (overlap.x > base.x) pieces.push({ x: base.x, y: overlap.y, w: overlap.x - base.x, h: overlap.h });
+  if (overlapRight < baseRight) pieces.push({ x: overlapRight, y: overlap.y, w: baseRight - overlapRight, h: overlap.h });
+  return pieces.filter((piece) => piece.w > 0 && piece.h > 0);
+};
+
+const subtractRects = (base: Rect, cuts: Rect[]) =>
+  cuts.reduce((pieces, cut) => pieces.flatMap((piece) => subtractRect(piece, cut)), [base]);
+
 const drawCandidateHighlights = (panels: PanelMap) => {
   if (!activeRuleMatches) return;
   const displayMatches = ambiguousRuleMatches ?? activeRuleMatches;
   const ambiguous = Boolean(ambiguousRuleMatches);
   ctx.save();
-  const rects: Rect[] = [];
-  displayMatches.candidates.forEach((candidate) => {
+  const entries = displayMatches.candidates.flatMap((candidate) => {
     const rect = candidateRect(candidate, panels);
-    if (!rect) return;
-    rects.push(rect);
+    return rect ? [{ candidate, rect }] : [];
+  });
+  entries.forEach(({ candidate, rect }) => {
+    const overlaps = ambiguous
+      ? entries.map((entry) => entry.rect).filter((other) => other !== rect).flatMap((other) => rectIntersection(rect, other) ?? [])
+      : [];
     ctx.fillStyle = candidate.direction === 'forward' ? 'rgba(59, 115, 196, 0.14)' : 'rgba(111, 168, 106, 0.16)';
     ctx.strokeStyle = candidate.direction === 'forward' ? '#3b73c4' : '#5b9a55';
     ctx.lineWidth = 2.4;
     ctx.setLineDash([7, 5]);
+    if (overlaps.length === 0) {
+      roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 12);
+      ctx.fill();
+    } else {
+      ctx.save();
+      roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 12);
+      ctx.clip();
+      subtractRects(rect, overlaps).forEach((piece) => ctx.fillRect(piece.x, piece.y, piece.w, piece.h));
+      ctx.restore();
+    }
     roundedRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 12);
-    ctx.fill();
     ctx.stroke();
   });
   if (ambiguous) {
     ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(20, 30, 45, 0.08)';
     ctx.strokeStyle = 'rgba(20, 30, 45, 0.18)';
     ctx.lineWidth = 1.4;
-    for (let i = 0; i < rects.length; i += 1) {
-      for (let j = i + 1; j < rects.length; j += 1) {
-        const overlap = rectIntersection(rects[i], rects[j]);
+    for (let i = 0; i < entries.length; i += 1) {
+      for (let j = i + 1; j < entries.length; j += 1) {
+        const overlap = rectIntersection(entries[i].rect, entries[j].rect);
         if (!overlap) continue;
         roundedRectPath(ctx, overlap.x, overlap.y, overlap.w, overlap.h, 8);
-        ctx.fill();
         ctx.stroke();
       }
     }
