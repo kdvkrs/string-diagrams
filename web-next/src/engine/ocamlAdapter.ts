@@ -44,7 +44,7 @@ const fallbackPuzzles: PuzzleInfo[] = [
     id: 'clean-up-two-units',
     level: 'Level 2',
     title: 'Level 2: Fork Reassociation',
-    subtitle: 'Use the same fork reassociation move twice. I’ll guide the first one; you finish the second.'
+    subtitle: 'Use the same fork reassociation move twice.'
   },
   {
     id: 'both-sides-meet',

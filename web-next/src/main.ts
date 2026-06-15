@@ -49,6 +49,15 @@ type RuleDisplayItem = {
   representativeName: string;
   ruleNames: string[];
   rules: SceneRule[];
+  previewFormula?: string;
+};
+type EasyRuleSlot = {
+  key: string;
+  label: () => string;
+  representativeName: string;
+  ruleNames: string[];
+  introducedAt: string;
+  previewFormula: string;
 };
 
 const DEFAULT_PUZZLE_ID = 'composite-monad-left-unit';
@@ -58,6 +67,24 @@ const ASSIST_STAGE_SELECTOR = '.stage';
 const RULE_PREVIEW_WIDTH = 220;
 const RULE_PREVIEW_HEIGHT = 112;
 const GUIDED_REWRITE_PUZZLE_IDS = new Set(['composite-monad-left-unit']);
+const EASY_RULE_SLOTS: EasyRuleSlot[] = [
+  {
+    key: 'push-through-crossing',
+    label: () => t.pushForkThroughCrossing,
+    representativeName: 'mx',
+    ruleNames: ['mx', 'nx', 'ny', 'oy', 'mz', 'oz'],
+    introducedAt: 'composite-monad-left-unit',
+    previewFormula: 'm: M⊗M -> M\nx: N⊗M -> M⊗N\nN·m ; x = x·M ; M·x ; m·N'
+  },
+  {
+    key: 'fork-reassociation',
+    label: () => t.forkReassociation,
+    representativeName: 'mA',
+    ruleNames: ['mA', 'nA', 'mm', 'nn', 'oo'],
+    introducedAt: 'clean-up-two-units',
+    previewFormula: 'm: M⊗M -> M\nm·M ; m = M·m ; m'
+  }
+];
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 
@@ -550,6 +577,8 @@ const localizeScene = (nextScene: SceneState): SceneState => {
 };
 let scene: SceneState = localizeScene(adapter.getScene());
 let layouts: LayoutState | null = null;
+const fallbackRulePreviewCache = new Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>();
+const fallbackRulePreviewLoading = new Set<string>();
 let layoutEpoch = 0;
 let activePuzzleId = scene.puzzleId || DEFAULT_PUZZLE_ID;
 const disabledRulesFor = (s: SceneState, reason = t.reason('No selection')): RuleAvailability[] =>
@@ -734,6 +763,12 @@ const nextPuzzleId = () => {
 };
 
 const puzzleIndex = (puzzleId: string) => puzzles.findIndex((p) => p.id === puzzleId);
+
+const puzzleIntroduced = (puzzleId: string) => {
+  const currentIdx = puzzleIndex(activePuzzleId);
+  const introducedIdx = puzzleIndex(puzzleId);
+  return currentIdx >= 0 && introducedIdx >= 0 && currentIdx >= introducedIdx;
+};
 
 const hasMainNextPuzzle = () => {
   const idx = puzzleIndex(activePuzzleId);
@@ -2336,15 +2371,46 @@ const drawRulePreviewGraphs = (container: HTMLElement, rule: { lhs: LayoutGraph;
   container.innerHTML = rulePreviewSvg(rule, RULE_PREVIEW_WIDTH, RULE_PREVIEW_HEIGHT, dimmed);
 };
 
-const drawRulePreview = (container: HTMLElement, name: string, dimmed: boolean) => {
-  const rule = layouts?.rules.get(name);
+const drawRulePreviewLoading = (container: HTMLElement, dimmed: boolean) => {
+  container.innerHTML = `
+    <svg class="rule-preview-svg" viewBox="0 0 ${RULE_PREVIEW_WIDTH} ${RULE_PREVIEW_HEIGHT}" role="img" aria-label="${t.rulePreviewLoading}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${RULE_PREVIEW_WIDTH}" height="${RULE_PREVIEW_HEIGHT}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
+      <text x="${RULE_PREVIEW_WIDTH * 0.5}" y="${RULE_PREVIEW_HEIGHT * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">${t.layoutLoading}</text>
+    </svg>
+  `;
+};
+
+const drawRulePreview = (container: HTMLElement, item: RuleDisplayItem, dimmed: boolean) => {
+  const rule = layouts?.rules.get(item.representativeName);
   if (!rule) {
-    container.innerHTML = `
-      <svg class="rule-preview-svg" viewBox="0 0 ${RULE_PREVIEW_WIDTH} ${RULE_PREVIEW_HEIGHT}" role="img" aria-label="${t.rulePreviewLoading}" xmlns="http://www.w3.org/2000/svg">
-        <rect width="${RULE_PREVIEW_WIDTH}" height="${RULE_PREVIEW_HEIGHT}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
-        <text x="${RULE_PREVIEW_WIDTH * 0.5}" y="${RULE_PREVIEW_HEIGHT * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">${t.layoutLoading}</text>
-      </svg>
-    `;
+    if (!item.previewFormula) {
+      drawRulePreviewLoading(container, dimmed);
+      return;
+    }
+    const cached = fallbackRulePreviewCache.get(item.previewFormula);
+    if (cached) {
+      drawRulePreviewGraphs(container, cached, dimmed);
+      return;
+    }
+    drawRulePreviewLoading(container, dimmed);
+    if (fallbackRulePreviewLoading.has(item.previewFormula)) return;
+    fallbackRulePreviewLoading.add(item.previewFormula);
+    void (async () => {
+      const formula = item.previewFormula ?? '';
+      try {
+        const fallbackRule = adapter.renderRule(formula);
+        const preview = {
+          lhs: await layoutSceneGraph(fallbackRule.lhs),
+          rhs: await layoutSceneGraph(fallbackRule.rhs)
+        };
+        fallbackRulePreviewCache.set(formula, preview);
+        if (document.body.contains(container)) drawRulePreviewGraphs(container, preview, dimmed);
+      } catch {
+        drawRulePreviewLoading(container, dimmed);
+      } finally {
+        fallbackRulePreviewLoading.delete(formula);
+      }
+    })();
     return;
   }
   drawRulePreviewGraphs(container, rule, dimmed);
@@ -2411,6 +2477,9 @@ const simpleRuleLabel = (ruleNames: string[]) => {
   return `${ruleNames[0]} +${ruleNames.length - 1}`;
 };
 
+const easySlotForRule = (ruleName: string) =>
+  EASY_RULE_SLOTS.find((slot) => slot.ruleNames.includes(ruleName));
+
 const ruleDisplayItems = (): RuleDisplayItem[] => {
   if (expertMode) {
     return scene.rules.map((rule) => ({
@@ -2428,7 +2497,24 @@ const ruleDisplayItems = (): RuleDisplayItem[] => {
     bucket.push(rule);
     groups.set(key, bucket);
   });
-  return Array.from(groups.entries()).map(([key, group]) => {
+  const consumed = new Set<string>();
+  const slots = EASY_RULE_SLOTS.filter((slot) => puzzleIntroduced(slot.introducedAt)).map((slot) => {
+    const rulesInSlot = scene.rules.filter((rule) => slot.ruleNames.includes(rule.name));
+    rulesInSlot.forEach((rule) => consumed.add(canonicalRuleKey(rule)));
+    const ruleNames = rulesInSlot.map((rule) => rule.name);
+    return {
+      key: `slot:${slot.key}`,
+      label: slot.label(),
+      representativeName: ruleNames[0] ?? slot.representativeName,
+      ruleNames,
+      rules: rulesInSlot,
+      previewFormula: slot.previewFormula
+    };
+  });
+  const extraGroups = Array.from(groups.entries()).filter(([key, group]) => {
+    if (consumed.has(key)) return false;
+    return !group.some((rule) => easySlotForRule(rule.name));
+  }).map(([key, group]) => {
     const ruleNames = group.map((rule) => rule.name);
     return {
       key: `group:${key}`,
@@ -2438,6 +2524,7 @@ const ruleDisplayItems = (): RuleDisplayItem[] => {
       rules: group
     };
   });
+  return [...slots, ...extraGroups];
 };
 
 const renderLevelButtons = () => {
@@ -2467,6 +2554,16 @@ const updateRuleScrollState = () => {
   if (!overflow) rulesShell.removeAttribute('data-scrolled');
 };
 
+const easyCandidateCounts = (items: RuleDisplayItem[]) => {
+  const counts = new Map<string, number>();
+  if (expertMode || !layouts || currentSelection.selectedNodeIds.length > 0) return counts;
+  items.forEach((item) => {
+    const count = item.ruleNames.reduce((sum, ruleName) => sum + adapter.ruleCandidates(ruleName).length, 0);
+    counts.set(item.key, count);
+  });
+  return counts;
+};
+
 const refreshUi = () => {
   const modePrompt = expertMode ? t.expertPrompt : t.easyPrompt;
   const lastMessage = scene.messages[0] || scene.subtitle || modePrompt;
@@ -2474,6 +2571,7 @@ const refreshUi = () => {
   const hasManualSelection = expertMode && hasSelection;
   const hasEnabledRule = rules.some((r) => r.enabled);
   const displayItems = ruleDisplayItems();
+  const easyCounts = easyCandidateCounts(displayItems);
   subtitle.textContent = ambiguousRuleMatches
     ? t.ambiguousRuleCandidates
     : activeRuleMatches
@@ -2492,6 +2590,7 @@ const refreshUi = () => {
     expertMode ? 'expert' : 'rule-first',
     activeRuleMatches ? `${activeRuleMatches.key}:${activeRuleMatches.candidates.length}` : 'no-active-rule',
     ambiguousRuleMatches ? `${ambiguousRuleMatches.key}:${ambiguousRuleMatches.candidates.map(candidateKey).join('+')}` : 'no-ambiguous-rule',
+    [...easyCounts.entries()].map(([key, count]) => `${key}:${count}`).join(','),
     scene.rules.map((r) => r.name).join(','),
     displayItems.map((item) => `${item.key}:${item.label}:${item.ruleNames.join('+')}`).join(','),
     rules.map((r) => `${r.name}:${r.enabled ? 1 : 0}:${r.reason ?? ''}`).join(',')
@@ -2506,8 +2605,9 @@ const refreshUi = () => {
     ...displayItems.map((item, idx) => {
       const availabilities = item.ruleNames.map((name) => rules.find((r) => r.name === name) ?? { name, enabled: false, reason: t.unavailable });
       const manuallyApplicable = hasManualSelection && availabilities.some((ra) => ra.enabled);
-      const dimmed = hasManualSelection && !manuallyApplicable;
-      const disabled = !layouts || (hasManualSelection && !manuallyApplicable);
+      const easyApplicable = expertMode || hasManualSelection || (easyCounts.get(item.key) ?? 0) > 0;
+      const dimmed = hasManualSelection ? !manuallyApplicable : !easyApplicable;
+      const disabled = !layouts || item.ruleNames.length === 0 || (hasManualSelection && !manuallyApplicable) || (!hasManualSelection && !easyApplicable);
       const active = activeRuleMatches?.key === item.key;
       const btn = document.createElement('button');
       btn.className = 'rule';
@@ -2521,7 +2621,9 @@ const refreshUi = () => {
       btn.dataset.ruleLabel = item.label;
       btn.dataset.ruleKey = `R${idx + 1}`;
       btn.disabled = disabled;
-      btn.title = manuallyApplicable
+      btn.title = disabled && layouts
+        ? t.unavailable
+        : manuallyApplicable
         ? t.applyRule(item.label)
         : active
           ? t.matchingRegionsForRule(activeRuleMatches?.candidates.length ?? 0, item.label)
@@ -2535,7 +2637,7 @@ const refreshUi = () => {
       const nameEl = btn.querySelector<HTMLElement>('.rule-name');
       if (nameEl) nameEl.textContent = item.label;
       const pv = btn.querySelector<HTMLElement>('.rule-preview');
-      if (pv) drawRulePreview(pv, item.representativeName, dimmed);
+      if (pv) drawRulePreview(pv, item, dimmed);
       return btn;
     })
   );
@@ -2543,9 +2645,9 @@ const refreshUi = () => {
     rulesContainer.querySelectorAll<HTMLElement>('.rule-preview').forEach((pv) => {
       if (pv.clientHeight > 0) {
         const btn = pv.closest<HTMLElement>('button.rule');
-        const name = btn?.dataset.ruleName;
         const dimmed = btn?.dataset.dimmed === 'true';
-        if (name) drawRulePreview(pv, name, dimmed);
+        const item = btn ? displayItems.find((entry) => entry.key === btn.dataset.ruleGroupKey) : undefined;
+        if (item) drawRulePreview(pv, item, dimmed);
       }
     });
     updateRuleScrollState();

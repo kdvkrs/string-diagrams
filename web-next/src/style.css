@@ -981,41 +981,14 @@ body.tut-on .stage::after {
   cursor: default;
 }
 
-.rules[data-selection="true"] .rule[data-dimmed="true"] {
-  flex-basis: 68px;
-  height: var(--rule-card-height);
-  justify-content: flex-start;
-  padding: 10px 8px;
-  opacity: 0.58;
-  background: rgba(251, 253, 255, 0.76);
+.rule[data-dimmed="true"] {
+  opacity: 0.54;
+  background: rgba(246, 249, 252, 0.86);
+  filter: grayscale(0.2);
 }
 
-.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-meta {
-  position: static;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-height: 100%;
-  justify-content: flex-start;
-}
-
-.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-badge {
+.rule[data-dimmed="true"] .rule-badge {
   background: rgba(38, 58, 80, 0.72);
-}
-
-.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-name {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  line-height: 1;
-  text-align: center;
-}
-
-.rules[data-selection="true"] .rule[data-dimmed="true"] .rule-preview {
-  display: none;
 }
 
 .rule-meta {
