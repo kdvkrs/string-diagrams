@@ -18,8 +18,6 @@ import {
   createAssistStepSets,
   createEasyRuleSlots,
   type ActiveRuleMatchSet,
-  type AssistPlacement,
-  type AssistRelativeRect,
   type AssistStep,
   type CrossingDiagnostic,
   type EasyRuleSlot,
@@ -62,6 +60,7 @@ import { renderSuccessModal } from './app/successModal';
 import { createSelectionFeedback } from './app/selectionFeedback';
 import { createMoveCounter } from './app/moveCounter';
 import { createRuleDock } from './app/ruleDock';
+import { createAssistOverlay } from './app/assistOverlay';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -445,9 +444,6 @@ let tutorialAbort: AbortController | null = null;
 let assistRunning = false;
 let assistSteps: AssistStep[] = [];
 let assistIndex = 0;
-let assistResizeObserver: ResizeObserver | null = null;
-let assistFingerFrame = 0;
-let assistFingerStartedAt = 0;
 let levelOneAssistSelection: SelectionDescriptor | null = null;
 let levelOneAssistRuleName = 'mA';
 let levelOneAssistApplied = false;
@@ -458,7 +454,6 @@ let debugCrossings: CrossingDiagnostic[] = [];
 // Tutorial lasso tuning: decrease this if the ghost lasso catches nearby nodes,
 // increase it if the lasso feels too tight around the highlighted rewrite.
 const TUTORIAL_LASSO_PAD = 16;
-const ASSIST_LASSO_DURATION_MS = 4800;
 const SHOW_NODE_LABELS = false;
 
 const interactionMode = (): InteractionMode => (expertMode ? 'expert' : 'easy');
@@ -508,6 +503,20 @@ const ruleDock = createRuleDock({
   ruleCandidates: (ruleName) => adapter.ruleCandidates(ruleName),
   t
 });
+const assistOverlay = createAssistOverlay({
+  root: tutorialRoot,
+  maskCutout: tutorialMaskCutout,
+  ring: tutorialRing,
+  demoLasso: tutorialDemoLasso,
+  card: tutorialCard,
+  kicker: tutorialKicker,
+  title: tutorialTitle,
+  body: tutorialBody,
+  dots: tutorialDots,
+  next: tutorialNext,
+  finger: tutorialFinger,
+  rulesContainer
+});
 
 const resetShellState = () => {
   proofOpen = false;
@@ -545,30 +554,10 @@ const selectionFeedbackController = createSelectionFeedback({
 const hideSelectionFeedback = selectionFeedbackController.hide;
 const showSelectionFeedback = selectionFeedbackController.show;
 
-const stopAssistFinger = () => {
-  if (assistFingerFrame) cancelAnimationFrame(assistFingerFrame);
-  assistFingerFrame = 0;
-  assistFingerStartedAt = 0;
-  tutorialFinger.classList.remove('assist-finger');
-  tutorialFinger.style.opacity = '';
-  tutorialFinger.style.transform = 'translate(-120px, -120px)';
-};
-
 const stopAssist = () => {
   if (!assistRunning) return;
   assistRunning = false;
-  document.body.classList.remove('assist-on');
-  tutorialRoot.setAttribute('aria-hidden', 'true');
-  tutorialRoot.removeAttribute('data-active');
-  tutorialRoot.hidden = true;
-  tutorialDemoLasso.classList.remove('tut-on');
-  tutorialDemoLasso.removeAttribute('d');
-  stopAssistFinger();
-  document
-    .querySelectorAll('.rule.assist-rule-pulse, .rule.tut-hot')
-    .forEach((el) => el.classList.remove('assist-rule-pulse', 'tut-hot'));
-  assistResizeObserver?.disconnect();
-  assistResizeObserver = null;
+  assistOverlay.stop();
 };
 
 const invalidateRuleDock = () => {
@@ -888,100 +877,6 @@ const currentAssistSteps = () => {
   return [];
 };
 
-const relativeRect = (rect: Rect, relative: AssistRelativeRect): Rect => ({
-  x: rect.x + rect.w * relative.x,
-  y: rect.y + rect.h * relative.y,
-  w: rect.w * relative.w,
-  h: rect.h * relative.h
-});
-
-const assistBaseRectFor = (step: AssistStep): Rect => {
-  const el = document.querySelector<HTMLElement>(step.selector);
-  if (!el) return { x: 0, y: 0, w: 0, h: 0 };
-  const r = el.getBoundingClientRect();
-  let rect = { x: r.left, y: r.top, w: r.width, h: r.height };
-  if (step.focusRect === 'rhs') rect = { ...rect, x: rect.x + rect.w * 0.55, w: rect.w * 0.45 };
-  if (step.focusRect === 'lhs') rect = { ...rect, w: rect.w * 0.45 };
-  return rect;
-};
-
-const assistSpotlightRectFor = (step: AssistStep): Rect => {
-  const rect = assistBaseRectFor(step);
-  const pad = step.padding;
-  return { x: rect.x - pad, y: rect.y - pad, w: rect.w + pad * 2, h: rect.h + pad * 2 };
-};
-
-const applyAssistMask = (rect: Rect) => {
-  const attrs = {
-    x: String(rect.x),
-    y: String(rect.y),
-    width: String(rect.w),
-    height: String(rect.h)
-  };
-  Object.entries(attrs).forEach(([name, value]) => {
-    tutorialMaskCutout.setAttribute(name, value);
-    tutorialRing.setAttribute(name, value);
-  });
-};
-
-const placeAssistCard = (rect: Rect, requested: AssistPlacement) => {
-  const margin = 14;
-  const cardW = tutorialCard.offsetWidth || 320;
-  const cardH = tutorialCard.offsetHeight || 170;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const order: AssistPlacement[] = [requested, 'right', 'left', 'bottom', 'top'];
-  const seen = new Set<AssistPlacement>();
-  let placement = requested;
-  let x = 8;
-  let y = 8;
-  let fits = false;
-
-  for (const p of order) {
-    if (seen.has(p)) continue;
-    seen.add(p);
-    let tx = 0;
-    let ty = 0;
-    if (p === 'right') {
-      tx = rect.x + rect.w + margin;
-      ty = rect.y + rect.h * 0.5 - cardH * 0.5;
-    } else if (p === 'left') {
-      tx = rect.x - cardW - margin;
-      ty = rect.y + rect.h * 0.5 - cardH * 0.5;
-    } else if (p === 'top') {
-      tx = rect.x + rect.w * 0.5 - cardW * 0.5;
-      ty = rect.y - cardH - margin;
-    } else {
-      tx = rect.x + rect.w * 0.5 - cardW * 0.5;
-      ty = rect.y + rect.h + margin;
-    }
-    if (tx >= 8 && ty >= 8 && tx + cardW <= vw - 8 && ty + cardH <= vh - 8) {
-      placement = p;
-      x = tx;
-      y = ty;
-      fits = true;
-      break;
-    }
-  }
-
-  if (!fits) {
-    placement = requested;
-    if (placement === 'right' || placement === 'left') {
-      x = placement === 'right' ? rect.x + rect.w + margin : rect.x - cardW - margin;
-      y = rect.y + rect.h * 0.5 - cardH * 0.5;
-    } else {
-      x = rect.x + rect.w * 0.5 - cardW * 0.5;
-      y = placement === 'bottom' ? rect.y + rect.h + margin : rect.y - cardH - margin;
-    }
-    x = clamp(x, 8, Math.max(8, vw - cardW - 8));
-    y = clamp(y, 8, Math.max(8, vh - cardH - 8));
-  }
-
-  tutorialCard.dataset.placement = placement;
-  tutorialCard.style.left = `${x}px`;
-  tutorialCard.style.top = `${y}px`;
-};
-
 const graphPanelForPageRect = (graphId: 'lhs' | 'rhs') => {
   const canvasRect = canvas.getBoundingClientRect();
   const panels = panelsForSize(canvasRect.width, canvasRect.height);
@@ -1020,99 +915,18 @@ const assistEllipseForSelection = (selection: SelectionDescriptor): Rect | null 
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 };
 
-const assistDemoRectFor = (step: AssistStep) => {
+const assistSelectionDemoRect = (step: AssistStep) => {
   if (step.selectionDemo === 'level-1-em') {
     const selection = getLevelOneAssistSelection();
-    const rect = selection ? assistEllipseForSelection(selection) : null;
-    if (rect) return rect;
+    return selection ? assistEllipseForSelection(selection) : null;
   }
-  const base = assistBaseRectFor(step);
-  return step.lassoRect ? relativeRect(base, step.lassoRect) : base;
+  return null;
 };
 
-const startAssistFingerOnLasso = () => {
-  stopAssistFinger();
-  const total = tutorialDemoLasso.getTotalLength();
-  if (!Number.isFinite(total) || total <= 0) return;
-  tutorialFinger.classList.add('assist-finger');
-  assistFingerStartedAt = performance.now();
-
-  const drawStart = 0.12;
-  const drawEnd = 0.46;
-  const holdEnd = 0.68;
-  const tick = (now: number) => {
-    if (!assistRunning || !tutorialDemoLasso.classList.contains('tut-on')) return;
-    const phase = ((now - assistFingerStartedAt) % ASSIST_LASSO_DURATION_MS) / ASSIST_LASSO_DURATION_MS;
-    let progress = 0;
-    let opacity = 0;
-    if (phase >= drawStart && phase <= drawEnd) {
-      progress = (phase - drawStart) / (drawEnd - drawStart);
-      opacity = 1;
-    } else if (phase > drawEnd && phase <= holdEnd) {
-      progress = 1;
-      opacity = 1;
-    } else if (phase > holdEnd) {
-      progress = 1;
-      opacity = Math.max(0, 1 - (phase - holdEnd) / (1 - holdEnd));
-    }
-    const point = tutorialDemoLasso.getPointAtLength(total * clamp(progress, 0, 1));
-    tutorialFinger.style.opacity = String(opacity);
-    tutorialFinger.style.transform = `translate(${point.x}px, ${point.y}px)`;
-    assistFingerFrame = requestAnimationFrame(tick);
-  };
-  assistFingerFrame = requestAnimationFrame(tick);
-};
-
-const setAssistDemo = (step: AssistStep) => {
-  if (step.demo !== 'lasso') {
-    tutorialDemoLasso.classList.remove('tut-on');
-    tutorialDemoLasso.removeAttribute('d');
-    stopAssistFinger();
-    return;
-  }
-  const rect = assistDemoRectFor(step);
-  const cx = rect.x + rect.w * 0.5;
-  const cy = rect.y + rect.h * 0.5;
-  const rx = rect.w * 0.5;
-  const ry = rect.h * 0.5;
-  const d = [
-    `M ${cx - rx} ${cy}`,
-    `C ${cx - rx} ${cy - ry * 0.55}, ${cx - rx * 0.52} ${cy - ry}, ${cx + rx * 0.05} ${cy - ry}`,
-    `C ${cx + rx * 0.72} ${cy - ry}, ${cx + rx} ${cy - ry * 0.55}, ${cx + rx} ${cy - ry * 0.03}`,
-    `C ${cx + rx} ${cy + ry * 0.67}, ${cx + rx * 0.5} ${cy + ry}, ${cx - rx * 0.08} ${cy + ry}`,
-    `C ${cx - rx * 0.78} ${cy + ry}, ${cx - rx} ${cy + ry * 0.55}, ${cx - rx} ${cy} Z`
-  ].join(' ');
-  tutorialDemoLasso.classList.remove('tut-on');
-  tutorialDemoLasso.setAttribute('d', d);
-  tutorialDemoLasso.setAttribute('pathLength', '1');
-  void tutorialDemoLasso.getBoundingClientRect();
-  tutorialDemoLasso.classList.add('tut-on');
-  startAssistFingerOnLasso();
-};
-
-const updateAssistRuleHighlight = (step: AssistStep) => {
-  document
-    .querySelectorAll('.rule.assist-rule-pulse, .rule.tut-hot')
-    .forEach((el) => el.classList.remove('assist-rule-pulse', 'tut-hot'));
+const assistPulseRuleName = (step: AssistStep) => {
   if (step.before !== 'select-level-1' && step.pulse !== 'level-1-rule' && !step.pulseRuleName) return;
   if (step.before === 'select-level-1' || step.pulse === 'level-1-rule') ensureLevelOneAssistSelection();
-  const ruleName = step.pulseRuleName ?? levelOneAssistRuleName;
-  const rule = rulesContainer.querySelector<HTMLElement>(
-    `.rule[data-rule-name="${ruleName}"], .rule[data-rule-names~="${ruleName}"]`
-  );
-  if (!rule) return;
-  rule.classList.add('tut-hot', 'assist-rule-pulse');
-};
-
-const paintAssistDots = () => {
-  tutorialDots.replaceChildren(
-    ...assistSteps.map((_, idx) => {
-      const dot = document.createElement('div');
-      dot.className = 'tut-dot';
-      dot.toggleAttribute('data-current', idx === assistIndex);
-      return dot;
-    })
-  );
+  return step.pulseRuleName ?? levelOneAssistRuleName;
 };
 
 const renderAssistStep = () => {
@@ -1121,16 +935,14 @@ const renderAssistStep = () => {
     stopAssist();
     return;
   }
-  const rect = assistSpotlightRectFor(step);
-  applyAssistMask(rect);
-  placeAssistCard(rect, step.placement);
-  setAssistDemo(step);
-  tutorialKicker.textContent = step.kicker;
-  tutorialTitle.textContent = step.title;
-  tutorialBody.textContent = step.body;
-  tutorialNext.textContent = assistIndex === assistSteps.length - 1 ? t.gotIt : t.next;
-  paintAssistDots();
-  updateAssistRuleHighlight(step);
+  assistOverlay.renderStep({
+    step,
+    index: assistIndex,
+    total: assistSteps.length,
+    nextLabel: assistIndex === assistSteps.length - 1 ? t.gotIt : t.next,
+    pulseRuleName: assistPulseRuleName(step) ?? null,
+    resolveSelectionDemoRect: assistSelectionDemoRect
+  });
 };
 
 const runAssistStepBefore = async (step: AssistStep) => {
@@ -1158,15 +970,8 @@ const startAssist = () => {
   if (tutorialRunning || proofOpen || successOpen) return;
   assistIndex = 0;
   assistRunning = true;
-  document.body.classList.add('assist-on');
-  tutorialRoot.hidden = false;
-  tutorialRoot.setAttribute('data-active', 'true');
-  tutorialRoot.setAttribute('aria-hidden', 'false');
+  assistOverlay.start(renderAssistStep);
   renderAssistStep();
-  if (typeof ResizeObserver !== 'undefined') {
-    assistResizeObserver = new ResizeObserver(renderAssistStep);
-    assistResizeObserver.observe(document.body);
-  }
 };
 
 const startAssistFromWelcome = async () => {
