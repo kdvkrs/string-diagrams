@@ -33,7 +33,14 @@ import {
   type RuleDisplayItem
 } from './app/config';
 import { createPerfPanel } from './app/perfPanel';
-import { displayPuzzleTitle, highlightRocq, proofFileName as makeProofFileName, shareProofText } from './app/proof';
+import {
+  displayPuzzleTitle,
+  highlightRocq,
+  proofFileName as makeProofFileName,
+  renderProofPanel,
+  setProofShareStatus as updateProofShareStatus,
+  shareProofText
+} from './app/proof';
 import {
   hasMainNextPuzzle as hasMainNextPuzzleFor,
   isBonusPuzzle as isBonusPuzzleId,
@@ -651,8 +658,7 @@ const proofFileName = () => {
 };
 
 const setProofShareStatus = (message: string) => {
-  proofShareStatus.textContent = message;
-  proofShareStatus.toggleAttribute('data-show', message.length > 0);
+  updateProofShareStatus(proofShareStatus, message);
 };
 
 const shareProof = async () => {
@@ -679,15 +685,20 @@ const showSuccess = () => {
 
 const showProof = () => {
   proofOpen = true;
-  successModal.removeAttribute('data-open');
-  proofPanel.setAttribute('data-open', 'true');
   const puzzle = puzzles.find((p) => p.id === activePuzzleId);
   const hasNext = hasMainNextPuzzle();
-  proofTitle.textContent = t.proofFor(puzzle ? displayPuzzleTitle(puzzle) : scene.title);
-  proofPrimaryAction.textContent = isOfficialFinalPuzzle() ? t.bonusLevel : hasNext ? t.nextLevel : t.close;
-  proofPrimaryAction.dataset.action = isOfficialFinalPuzzle() ? 'bonus-level' : hasNext ? 'next-level' : 'close-proof';
-  proof.innerHTML = highlightRocq(currentProofText());
-  setProofShareStatus('');
+  renderProofPanel({
+    proofPanel,
+    successModal,
+    proofTitle,
+    proofPrimaryAction,
+    proof,
+    proofShareStatus,
+    title: t.proofFor(puzzle ? displayPuzzleTitle(puzzle) : scene.title),
+    primaryLabel: isOfficialFinalPuzzle() ? t.bonusLevel : hasNext ? t.nextLevel : t.close,
+    primaryAction: isOfficialFinalPuzzle() ? 'bonus-level' : hasNext ? 'next-level' : 'close-proof',
+    proofText: currentProofText()
+  });
 };
 
 const startTutorial = async () => {

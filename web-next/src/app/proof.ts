@@ -29,6 +29,43 @@ export const proofFileName = (puzzle: PuzzleInfo | undefined, sceneTitle: string
   return `${slug}.v`;
 };
 
+export const setProofShareStatus = (element: HTMLElement, message: string) => {
+  element.textContent = message;
+  element.toggleAttribute('data-show', message.length > 0);
+};
+
+export const renderProofPanel = ({
+  proofPanel,
+  successModal,
+  proofTitle,
+  proofPrimaryAction,
+  proof,
+  proofShareStatus,
+  title,
+  primaryLabel,
+  primaryAction,
+  proofText
+}: {
+  proofPanel: HTMLElement;
+  successModal: HTMLElement;
+  proofTitle: HTMLElement;
+  proofPrimaryAction: HTMLButtonElement;
+  proof: HTMLPreElement;
+  proofShareStatus: HTMLElement;
+  title: string;
+  primaryLabel: string;
+  primaryAction: string;
+  proofText: string;
+}) => {
+  successModal.removeAttribute('data-open');
+  proofPanel.setAttribute('data-open', 'true');
+  proofTitle.textContent = title;
+  proofPrimaryAction.textContent = primaryLabel;
+  proofPrimaryAction.dataset.action = primaryAction;
+  proof.innerHTML = highlightRocq(proofText);
+  setProofShareStatus(proofShareStatus, '');
+};
+
 export const shareProofText = async ({
   proofText,
   title,
