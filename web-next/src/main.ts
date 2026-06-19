@@ -17,7 +17,6 @@ import {
   BONUS_PUZZLE_ID,
   DEFAULT_PUZZLE_ID,
   GUIDED_REWRITE_PUZZLE_IDS,
-  MODE_STORAGE_KEY,
   RULE_PREVIEW_HEIGHT,
   RULE_PREVIEW_WIDTH,
   createAssistStepSets,
@@ -52,6 +51,11 @@ import {
   uniqueRuleCandidates
 } from './app/easyMatching';
 import { queryAppDom } from './app/dom';
+import {
+  initialInteractionMode,
+  storeInteractionMode as persistInteractionMode,
+  syncModeControls as syncInteractionModeControls
+} from './app/interactionMode';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -423,11 +427,8 @@ const emptySelection = (): SelectionDescriptor => ({
   cycleOrder: []
 });
 
-const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
-const initialInteractionMode: InteractionMode = storedMode === 'expert' ? 'expert' : 'easy';
-
 let currentSelection: SelectionDescriptor = emptySelection();
-let expertMode = initialInteractionMode === 'expert';
+let expertMode = initialInteractionMode() === 'expert';
 let activeRuleMatches: ActiveRuleMatchSet = null;
 let ambiguousRuleMatches: ActiveRuleMatchSet = null;
 let lasso: Point[] = [];
@@ -464,17 +465,11 @@ const SHOW_NODE_LABELS = false;
 const interactionMode = (): InteractionMode => (expertMode ? 'expert' : 'easy');
 
 const storeInteractionMode = () => {
-  window.localStorage.setItem(MODE_STORAGE_KEY, interactionMode());
+  persistInteractionMode(interactionMode());
 };
 
 const syncModeControls = () => {
-  expertToggle.setAttribute('aria-pressed', String(expertMode));
-  expertToggle.dataset.active = String(expertMode);
-  document.querySelectorAll<HTMLButtonElement>('[data-action="welcome-mode"]').forEach((button) => {
-    const active = button.dataset.mode === interactionMode();
-    button.dataset.active = String(active);
-    button.setAttribute('aria-pressed', String(active));
-  });
+  syncInteractionModeControls({ expertToggle, mode: interactionMode() });
 };
 
 const setExpertMode = (nextExpertMode: boolean) => {
