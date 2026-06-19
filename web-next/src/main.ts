@@ -63,6 +63,7 @@ import {
   storeInteractionMode as persistInteractionMode,
   syncModeControls as syncInteractionModeControls
 } from './app/interactionMode';
+import { renderSuccessModal } from './app/successModal';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -670,16 +671,17 @@ const shareProof = async () => {
 const showSuccess = () => {
   if (successOpen) return;
   successOpen = true;
-  const nextButton = successModal.querySelector<HTMLButtonElement>('[data-action="next-level"]');
   const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
   const hasNext = hasMainNextPuzzle();
-  successModal.toggleAttribute('data-final', !hasNext);
-  successFinalBody.innerHTML = isBonusPuzzle() ? t.bonusSuccessBody : t.finalSuccessBody;
-  if (nextButton) {
-    nextButton.hidden = !hasNext;
-    nextButton.textContent = hasNext ? t.nextLabel(puzzles[idx + 1].level) : t.nextLevel;
-  }
-  successModal.setAttribute('data-open', 'true');
+  renderSuccessModal({
+    successModal,
+    successFinalBody,
+    hasNext,
+    nextLabel: hasNext ? t.nextLabel(puzzles[idx + 1].level) : t.nextLevel,
+    finalBodyHtml: t.finalSuccessBody,
+    bonusBodyHtml: t.bonusSuccessBody,
+    isBonus: isBonusPuzzle()
+  });
   fireConfetti({ canvas: confettiCanvas, host: successModal, finale: !hasNext || isBonusPuzzle(), cssVar });
 };
 
