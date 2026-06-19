@@ -64,6 +64,7 @@ import {
   syncModeControls as syncInteractionModeControls
 } from './app/interactionMode';
 import { renderSuccessModal } from './app/successModal';
+import { createSelectionFeedback } from './app/selectionFeedback';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -456,7 +457,6 @@ let assistIndex = 0;
 let assistResizeObserver: ResizeObserver | null = null;
 let assistFingerFrame = 0;
 let assistFingerStartedAt = 0;
-let selectionFeedbackTimer = 0;
 let levelOneAssistSelection: SelectionDescriptor | null = null;
 let levelOneAssistRuleName = 'mA';
 let levelOneAssistApplied = false;
@@ -537,19 +537,13 @@ const stopTutorial = () => {
   tutorialFinger.style.transform = 'translate(-120px, -120px)';
 };
 
-const hideSelectionFeedback = () => {
-  if (selectionFeedbackTimer) window.clearTimeout(selectionFeedbackTimer);
-  selectionFeedbackTimer = 0;
-  selectionFeedback.removeAttribute('data-show');
-};
+const selectionFeedbackController = createSelectionFeedback({
+  element: selectionFeedback,
+  isSuppressed: () => tutorialRunning || assistRunning
+});
 
-const showSelectionFeedback = (message: string) => {
-  if (tutorialRunning || assistRunning) return;
-  if (selectionFeedbackTimer) window.clearTimeout(selectionFeedbackTimer);
-  selectionFeedback.textContent = message;
-  selectionFeedback.setAttribute('data-show', 'true');
-  selectionFeedbackTimer = window.setTimeout(hideSelectionFeedback, 2600);
-};
+const hideSelectionFeedback = selectionFeedbackController.hide;
+const showSelectionFeedback = selectionFeedbackController.show;
 
 const stopAssistFinger = () => {
   if (assistFingerFrame) cancelAnimationFrame(assistFingerFrame);
