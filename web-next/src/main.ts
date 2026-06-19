@@ -2,7 +2,7 @@ import './style.css';
 import { OcamlAdapter } from './engine/ocamlAdapter';
 import { type LayoutGraph, type LayoutNode, type LayoutPoint } from './layout/layoutTypes';
 import { animateSceneGraphLayout, layoutSceneGraph, type LayoutSeed } from './layout/physicsLayout';
-import type { PortRef, PuzzleInfo, RuleAvailability, RuleCandidate, SceneGraph, SceneRule, SceneState, SelectionDescriptor } from './model/interop';
+import type { PuzzleInfo, RuleAvailability, RuleCandidate, SceneState, SelectionDescriptor } from './model/interop';
 import { perf } from './perf';
 import {
   type Point,
@@ -43,6 +43,14 @@ import {
   puzzleIntroduced as puzzleIntroducedFor
 } from './app/puzzles';
 import { fireConfetti } from './app/confetti';
+import {
+  candidateHitsAt as easyCandidateHitsAt,
+  candidateKey,
+  candidateRect as easyCandidateRect,
+  ruleDisplayItems as easyRuleDisplayItems,
+  selectionFromCandidate,
+  uniqueRuleCandidates
+} from './app/easyMatching';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -1767,34 +1775,29 @@ const lassoPathForSelection = (selection: SelectionDescriptor, panel: Rect, layo
   ];
 };
 
-const candidateRect = (candidate: RuleCandidate, panels: PanelMap): Rect | null => {
-  const layout = layouts?.graphs.get(candidate.graphId);
-  if (!layout) return null;
-  const view = viewForLayout(layout, panels[candidate.graphId]);
-  const selected = new Set(candidate.selectedNodeIds);
-  const nodes = layout.nodes.filter((node) => selected.has(node.id) && !node.boundary);
-  if (nodes.length === 0) return null;
-  const xs: number[] = [];
-  const ys: number[] = [];
-  nodes.forEach((node) => {
-    const r = screenNodeRect(node, view);
-    xs.push(r.x, r.x + r.w);
-    ys.push(r.y, r.y + r.h);
-  });
-  const pad = 18;
-  const panel = panels[candidate.graphId];
-  const x0 = Math.max(panel.x + 8, Math.min(...xs) - pad);
-  const x1 = Math.min(panel.x + panel.w - 8, Math.max(...xs) + pad);
-  const y0 = Math.max(panel.y + 8, Math.min(...ys) - pad);
-  const y1 = Math.min(panel.y + panel.h - 8, Math.max(...ys) + pad);
-  return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
-};
+const candidateRect = (candidate: RuleCandidate, panels: PanelMap): Rect | null =>
+  layouts
+    ? easyCandidateRect({
+        candidate,
+        panels,
+        layouts: layouts.graphs,
+        viewForLayout,
+        screenNodeRect
+      })
+    : null;
 
 const candidateHitsAt = (p: Point, panels: PanelMap, candidates: RuleCandidate[]) =>
-  candidates
-    .map((candidate) => ({ candidate, rect: candidateRect(candidate, panels) }))
-    .filter((entry): entry is { candidate: RuleCandidate; rect: Rect } => Boolean(entry.rect && inPanel(p, entry.rect)))
-    .sort((a, b) => (a.rect.w * a.rect.h) - (b.rect.w * b.rect.h));
+  layouts
+    ? easyCandidateHitsAt({
+        point: p,
+        panels,
+        candidates,
+        layouts: layouts.graphs,
+        viewForLayout,
+        screenNodeRect,
+        inPanel
+      })
+    : [];
 
 const setAmbiguousRuleMatches = (candidates: RuleCandidate[]) => {
   if (!activeRuleMatches) return;
@@ -2052,115 +2055,17 @@ const drawRulePreview = (container: HTMLElement, item: RuleDisplayItem, dimmed: 
   drawRulePreviewGraphs(container, rule, dimmed);
 };
 
-const nodeTypeSignature = (node: SceneRule['lhs']['nodes'][number]) => [
-  node.kind,
-  node.nsources,
-  node.ntargets,
-  node.visual.shape ?? '',
-  node.sourceTypes.length,
-  node.targetTypes.length
-].join(':');
-
-const endpointTypeKey = (port: PortRef, nodesById: Map<string, SceneRule['lhs']['nodes'][number]>) => {
-  if (port.kind === 'source' || port.kind === 'target') return port.kind;
-  if (
-    (port.kind === 'nodeSource' || port.kind === 'nodeTarget') &&
-    typeof port.nodeId === 'string'
-  ) {
-    const node = nodesById.get(port.nodeId);
-    return `${port.kind}:${node ? nodeTypeSignature(node) : '?'}`;
-  }
-  return JSON.stringify(port);
-};
-
-const ruleTypeGraphKey = (graph: SceneGraph) => {
-  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
-  const nodeParts = graph.nodes.map(nodeTypeSignature).sort();
-  const edgeParts = graph.edges
-    .map((edge) => `${endpointTypeKey(edge.from, nodesById)}>${endpointTypeKey(edge.to, nodesById)}`)
-    .sort();
-  return [
-    `s=${graph.sources}`,
-    `t=${graph.targets}`,
-    `nodes=${nodeParts.join('|')}`,
-    `edges=${edgeParts.join('|')}`
-  ].join(';');
-};
-
-const canonicalRuleKey = (rule: SceneRule) => {
-  const forward = `${ruleTypeGraphKey(rule.lhs)} == ${ruleTypeGraphKey(rule.rhs)}`;
-  const backward = `${ruleTypeGraphKey(rule.rhs)} == ${ruleTypeGraphKey(rule.lhs)}`;
-  return forward < backward ? forward : backward;
-};
-
-const ruleFamilyLabel = (ruleNames: string[]) => {
-  if (ruleNames.length > 0 && ruleNames.every((name) => ['mA', 'nA', 'mm', 'nn', 'oo'].includes(name))) {
-    return t.forkReassociation;
-  }
-  if (
-    ruleNames.length > 0 &&
-    ruleNames.every((name) => ['mx', 'nx', 'ny', 'oy', 'mz', 'oz'].includes(name))
-  ) {
-    return t.pushForkThroughCrossing;
-  }
-  return null;
-};
-
-const simpleRuleLabel = (ruleNames: string[]) => {
-  const familyLabel = ruleFamilyLabel(ruleNames);
-  if (familyLabel) return familyLabel;
-  if (ruleNames.length <= 2) return ruleNames.join('/');
-  return `${ruleNames[0]} +${ruleNames.length - 1}`;
-};
-
-const easySlotForRule = (ruleName: string) =>
-  EASY_RULE_SLOTS.find((slot) => slot.ruleNames.includes(ruleName));
-
 const ruleDisplayItems = (): RuleDisplayItem[] => {
-  if (expertMode) {
-    return scene.rules.map((rule) => ({
-      key: `rule:${rule.name}`,
-      label: rule.name,
-      representativeName: rule.name,
-      ruleNames: [rule.name],
-      rules: [rule]
-    }));
-  }
-  const groups = new Map<string, SceneRule[]>();
-  scene.rules.forEach((rule) => {
-    const key = canonicalRuleKey(rule);
-    const bucket = groups.get(key) ?? [];
-    bucket.push(rule);
-    groups.set(key, bucket);
+  return easyRuleDisplayItems({
+    expertMode,
+    sceneRules: scene.rules,
+    easyRuleSlots: EASY_RULE_SLOTS,
+    puzzleIntroduced,
+    labels: {
+      forkReassociation: t.forkReassociation,
+      pushForkThroughCrossing: t.pushForkThroughCrossing
+    }
   });
-  const consumed = new Set<string>();
-  const slots = EASY_RULE_SLOTS.filter((slot) => puzzleIntroduced(slot.introducedAt)).map((slot) => {
-    const rulesInSlot = scene.rules.filter((rule) => slot.ruleNames.includes(rule.name));
-    rulesInSlot.forEach((rule) => consumed.add(canonicalRuleKey(rule)));
-    const ruleNames = rulesInSlot.map((rule) => rule.name);
-    return {
-      key: `slot:${slot.key}`,
-      label: slot.label(),
-      representativeName: ruleNames[0] ?? slot.representativeName,
-      ruleNames,
-      rules: rulesInSlot,
-      previewFormula: slot.previewFormula
-    };
-  });
-  const extraGroups = Array.from(groups.entries()).filter(([key, group]) => {
-    if (consumed.has(key)) return false;
-    return !group.some((rule) => easySlotForRule(rule.name));
-  }).map(([key, group]) => {
-    const ruleNames = group.map((rule) => rule.name);
-    return {
-      key: `group:${key}`,
-      label: simpleRuleLabel(ruleNames),
-      representativeName: ruleNames[0],
-      ruleNames,
-      rules: group
-    };
-  });
-  return [...slots, ...extraGroups];
 };
 
 const renderLevelButtons = () => {
@@ -2445,14 +2350,6 @@ const clearManualSelection = () => {
   ambiguousRuleMatches = null;
 };
 
-const selectionFromCandidate = (candidate: RuleCandidate): SelectionDescriptor => ({
-  graphId: candidate.graphId,
-  selectedNodeIds: [...candidate.selectedNodeIds],
-  polygon: [],
-  cuts: [],
-  cycleOrder: []
-});
-
 const applyRuleToSelection = async (name: string, selection: SelectionDescriptor) => {
   const seed = seedFromCurrentLayout(selection);
   const collapseCenter = layoutCenterFromCurrentSelection(selection);
@@ -2478,15 +2375,7 @@ const activateRuleCandidates = (item: { key: string; label: string; ruleNames: s
   }
   clearManualSelection();
   const candidates = perf.time('ocaml.ruleCandidates', () => {
-    const seen = new Set<string>();
-    return item.ruleNames.flatMap((ruleName) =>
-      adapter.ruleCandidates(ruleName).filter((candidate) => {
-        const key = candidateKey(candidate);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-    );
+    return uniqueRuleCandidates(item.ruleNames, (ruleName) => adapter.ruleCandidates(ruleName));
   });
   if (candidates.length === 0) {
     activeRuleMatches = null;
@@ -2536,9 +2425,6 @@ const handleRuleCandidateTap = async (p: Point, panels: PanelMap) => {
   setAmbiguousRuleMatches(hits.map((hit) => hit.candidate));
   render();
 };
-
-const candidateKey = (candidate: RuleCandidate) =>
-  `${candidate.ruleName}|${candidate.graphId}|${candidate.direction}|${[...candidate.selectedNodeIds].sort().join(',')}`;
 
 const ruleNamesFromButton = (btn: HTMLButtonElement) =>
   (btn.dataset.ruleNames ?? btn.dataset.ruleName ?? '')
