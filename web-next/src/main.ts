@@ -51,6 +51,7 @@ import {
   selectionFromCandidate,
   uniqueRuleCandidates
 } from './app/easyMatching';
+import { queryAppDom } from './app/dom';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -333,65 +334,53 @@ app.innerHTML = `
   </footer>
 `;
 
-const canvas = document.querySelector<HTMLCanvasElement>('#stage');
-const subtitle = document.querySelector<HTMLElement>('#subtitle-text');
-const proof = document.querySelector<HTMLPreElement>('#proof');
-const proofTitle = document.querySelector<HTMLElement>('#proof-title');
-const proofShareStatus = document.querySelector<HTMLElement>('#proof-share-status');
-const proofShareAction = document.querySelector<HTMLButtonElement>('#proof-share-action');
-const proofPrimaryAction = document.querySelector<HTMLButtonElement>('#proof-primary-action');
-const moveCountEl = document.querySelector<HTMLElement>('#move-count');
-const moveCounter = document.querySelector<HTMLElement>('[data-move-counter]');
-const successModal = document.querySelector<HTMLElement>('#success-modal');
-const successFinalBody = document.querySelector<HTMLElement>('#success-final-body');
-const proofPanel = document.querySelector<HTMLElement>('#proof-panel');
-const helpPanel = document.querySelector<HTMLElement>('#help-panel');
-const tutorialPanel = document.querySelector<HTMLElement>('#tutorial-panel');
-const assistWelcomePanel = document.querySelector<HTMLElement>('#assist-welcome-panel');
-const resetDemoPanel = document.querySelector<HTMLElement>('#reset-demo-panel');
-const creditsPanel = document.querySelector<HTMLElement>('#credits-panel');
-const tutorialCanvas = document.querySelector<HTMLCanvasElement>('#tutorial-stage');
-const tutorialRuleCard = document.querySelector<HTMLButtonElement>('#tutorial-rule-card');
-const tutorialRulePreview = document.querySelector<HTMLElement>('#tutorial-rule-preview');
-const tutorialRoot = document.querySelector<HTMLElement>('#tutorial-root');
-const tutorialVeil = document.querySelector<SVGSVGElement>('#tutorial-veil');
-const tutorialMaskCutout = document.querySelector<SVGRectElement>('#tutorial-mask-cutout');
-const tutorialRing = document.querySelector<SVGRectElement>('#tutorial-ring');
-const tutorialDemoLasso = document.querySelector<SVGPathElement>('#tutorial-demo-lasso');
-const tutorialCard = document.querySelector<HTMLElement>('#tutorial-card');
-const tutorialKicker = document.querySelector<HTMLElement>('#tutorial-kicker');
-const tutorialTitle = document.querySelector<HTMLElement>('#tutorial-title');
-const tutorialBody = document.querySelector<HTMLElement>('#tutorial-body');
-const tutorialDots = document.querySelector<HTMLElement>('#tutorial-dots');
-const tutorialNext = document.querySelector<HTMLButtonElement>('#tutorial-next');
-const confettiCanvas = document.querySelector<HTMLCanvasElement>('#confetti-canvas');
-const tutorialCaption = document.querySelector<HTMLElement>('#tutorial-caption');
-const selectionFeedback = document.querySelector<HTMLElement>('#selection-feedback');
-const tutorialFinger = document.querySelector<HTMLElement>('#tutorial-finger');
-const tutorialRipple = document.querySelector<HTMLElement>('#tutorial-ripple');
-const perfPanel = document.querySelector<HTMLElement>('#perf-panel');
-const perfOutput = document.querySelector<HTMLPreElement>('#perf-output');
-const levelActions = document.querySelector<HTMLSelectElement>('#level-actions');
-const localeActions = document.querySelector<HTMLSelectElement>('#locale-actions');
-const welcomeLocaleActions = document.querySelector<HTMLSelectElement>('#welcome-locale-actions');
-const rulesShell = document.querySelector<HTMLElement>('#rules-shell');
-const rulesContainer = document.querySelector<HTMLElement>('#rules');
-const expertToggle = document.querySelector<HTMLButtonElement>('[data-action="expert-toggle"]');
-const moreMenu = document.querySelector<HTMLDetailsElement>('.more');
-if (
-  !canvas || !subtitle || !proof || !proofTitle || !proofShareStatus || !proofShareAction || !proofPrimaryAction || !successModal || !successFinalBody || !proofPanel || !helpPanel ||
-  !tutorialPanel || !assistWelcomePanel || !resetDemoPanel || !creditsPanel || !tutorialCanvas || !tutorialRuleCard || !tutorialRulePreview || !tutorialRoot ||
-  !tutorialVeil || !tutorialMaskCutout || !tutorialRing || !tutorialDemoLasso || !tutorialCard || !tutorialKicker || !tutorialTitle ||
-  !tutorialBody || !tutorialDots || !tutorialNext || !confettiCanvas || !tutorialCaption || !selectionFeedback || !tutorialFinger || !tutorialRipple ||
-  !perfPanel || !perfOutput ||
-  !levelActions || !localeActions || !welcomeLocaleActions || !rulesShell || !rulesContainer || !expertToggle || !moreMenu
-) {
-  throw new Error('Missing required UI element');
-}
-const ctx = canvas.getContext('2d');
-if (!ctx) throw new Error('2D context unavailable');
-const tutorialCtx = tutorialCanvas.getContext('2d');
-if (!tutorialCtx) throw new Error('Tutorial 2D context unavailable');
+const {
+  canvas,
+  subtitle,
+  proof,
+  proofTitle,
+  proofShareStatus,
+  proofPrimaryAction,
+  moveCountEl,
+  moveCounter,
+  successModal,
+  successFinalBody,
+  proofPanel,
+  helpPanel,
+  tutorialPanel,
+  assistWelcomePanel,
+  resetDemoPanel,
+  creditsPanel,
+  tutorialCanvas,
+  tutorialRuleCard,
+  tutorialRulePreview,
+  tutorialRoot,
+  tutorialMaskCutout,
+  tutorialRing,
+  tutorialDemoLasso,
+  tutorialCard,
+  tutorialKicker,
+  tutorialTitle,
+  tutorialBody,
+  tutorialDots,
+  tutorialNext,
+  confettiCanvas,
+  tutorialCaption,
+  selectionFeedback,
+  tutorialFinger,
+  tutorialRipple,
+  perfPanel,
+  perfOutput,
+  levelActions,
+  localeActions,
+  welcomeLocaleActions,
+  rulesShell,
+  rulesContainer,
+  expertToggle,
+  moreMenu,
+  ctx,
+  tutorialCtx
+} = queryAppDom();
 
 const adapter = new OcamlAdapter(DEFAULT_PUZZLE_ID);
 const puzzles = localizePuzzles(adapter.listDemos(), t);
