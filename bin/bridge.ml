@@ -1193,6 +1193,7 @@ let render_term formula_js =
     ]
 
 let _ =
+  (* Keep this exported JS surface in sync with web-next/src/engine/bridgeContract.ts. *)
   Js.export "StringDiagramsBridge"
     (obj [
          "init_demo", Js.Unsafe.inject (Js.wrap_callback init_demo);

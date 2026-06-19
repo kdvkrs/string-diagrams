@@ -8,28 +8,7 @@ import type {
   SelectionDescriptor,
   TutorialDemo
 } from '../model/interop';
-
-type BridgeApi = {
-  init_demo: (name: string) => unknown;
-  list_demos?: () => unknown;
-  tutorial_demo?: (name: string) => unknown;
-  get_scene: () => unknown;
-  evaluate_selection: (selection: unknown) => unknown;
-  rule_candidates?: (ruleName: string) => unknown;
-  apply_rule: (ruleName: string, selection: unknown) => unknown;
-  undo: () => unknown;
-  redo: () => unknown;
-  export_proof: () => string;
-  get_messages: () => unknown;
-  render_term?: (formula: string) => unknown;
-  render_rule?: (formula: string) => unknown;
-};
-
-declare global {
-  interface Window {
-    StringDiagramsBridge?: BridgeApi;
-  }
-}
+import { bridgeCapabilities, type BridgeApi, type BridgeCapabilities } from './bridgeContract';
 
 const DEFAULT_DEMO = 'composite-monad-left-unit';
 
@@ -211,6 +190,7 @@ const toPuzzleInfo = (raw: unknown): PuzzleInfo => {
 
 export class OcamlAdapter {
   private bridge: BridgeApi;
+  private capabilities: BridgeCapabilities;
   private scene: SceneState;
 
   constructor(demoName = DEFAULT_DEMO) {
@@ -218,11 +198,12 @@ export class OcamlAdapter {
       throw new Error('Missing StringDiagramsBridge. Did you load bridge.bc.js?');
     }
     this.bridge = window.StringDiagramsBridge;
+    this.capabilities = bridgeCapabilities(this.bridge);
     this.scene = toSceneState(this.bridge.init_demo(demoName));
   }
 
   listDemos(): PuzzleInfo[] {
-    if (!this.bridge.list_demos) return fallbackPuzzles;
+    if (!this.capabilities.listDemos || !this.bridge.list_demos) return fallbackPuzzles;
     const demos = asArray<unknown>(this.bridge.list_demos()).map(toPuzzleInfo).filter((p) => p.id);
     return demos.length > 0 ? demos : fallbackPuzzles;
   }
@@ -238,7 +219,7 @@ export class OcamlAdapter {
   }
 
   tutorialDemo(demoName = DEFAULT_DEMO): TutorialDemo {
-    if (!this.bridge.tutorial_demo) {
+    if (!this.capabilities.tutorialDemo || !this.bridge.tutorial_demo) {
       return { ok: false, error: 'Bridge does not expose tutorial_demo.' };
     }
     return toTutorialDemo(this.bridge.tutorial_demo(demoName));
@@ -249,7 +230,7 @@ export class OcamlAdapter {
   }
 
   ruleCandidates(ruleName: string): RuleCandidate[] {
-    if (!this.bridge.rule_candidates) return [];
+    if (!this.capabilities.ruleCandidates || !this.bridge.rule_candidates) return [];
     return toRuleCandidates(this.bridge.rule_candidates(ruleName));
   }
 
@@ -276,14 +257,14 @@ export class OcamlAdapter {
   }
 
   renderTerm(formula: string): ReturnType<typeof parseGraph> {
-    if (!this.bridge.render_term) throw new Error('render_term not available in this bridge build');
+    if (!this.capabilities.renderTerm || !this.bridge.render_term) throw new Error('render_term not available in this bridge build');
     const raw = this.bridge.render_term(formula) as Record<string, unknown>;
     if (!asBoolean(raw.ok)) throw new Error(asString(raw.error));
     return parseGraph((raw.graph ?? {}) as Record<string, unknown>);
   }
 
   renderRule(formula: string): { lhs: ReturnType<typeof parseGraph>; rhs: ReturnType<typeof parseGraph> } {
-    if (!this.bridge.render_rule) throw new Error('render_rule not available in this bridge build');
+    if (!this.capabilities.renderRule || !this.bridge.render_rule) throw new Error('render_rule not available in this bridge build');
     const raw = this.bridge.render_rule(formula) as Record<string, unknown>;
     if (!asBoolean(raw.ok)) throw new Error(asString(raw.error));
     return {
