@@ -1005,6 +1005,22 @@ body.tut-on .stage::after {
   background: rgba(38, 58, 80, 0.72);
 }
 
+.rules[data-mode="expert"][data-selection="true"] .rule[data-dimmed="true"] {
+  flex-basis: 54px;
+  padding: 8px 7px;
+  overflow: hidden;
+}
+
+.rules[data-mode="expert"][data-selection="true"] .rule[data-dimmed="true"] .rule-meta {
+  inset-inline: 7px;
+  justify-content: center;
+}
+
+.rules[data-mode="expert"][data-selection="true"] .rule[data-dimmed="true"] .rule-name,
+.rules[data-mode="expert"][data-selection="true"] .rule[data-dimmed="true"] .rule-preview {
+  display: none;
+}
+
 .rule-meta {
   position: absolute;
   inset: 8px 9px auto 9px;

@@ -13,226 +13,44 @@ import {
   rulePreviewSvg as rulePreviewSvgBase,
 } from './diagramSvg';
 import { getInitialLocale, localizePuzzle, localizePuzzles, storeLocale, supportedLocales, switchLocale, translations, type Locale } from './i18n';
-type PanelMap = { lhs: Rect; rhs: Rect };
-type CrossingDiagnostic = { graphId: string; edgeA: string; edgeB: string; point: Point };
-type AssistPlacement = 'top' | 'right' | 'bottom' | 'left';
-type AssistFocusRect = 'lhs' | 'rhs';
-type AssistRelativeRect = { x: number; y: number; w: number; h: number };
-type AssistStep = {
-  selector: string;
-  padding: number;
-  focusRect?: AssistFocusRect;
-  lassoRect?: AssistRelativeRect;
-  selectionDemo?: 'level-1-em';
-  before?: 'select-level-1' | 'apply-level-1' | 'activate-level-1-rule' | 'apply-level-1-candidate';
-  pulse?: 'level-1-rule';
-  pulseRuleName?: string;
-  kicker: string;
-  title: string;
-  body: string;
-  placement: AssistPlacement;
-  demo?: 'lasso';
-};
-type LayoutState = {
-  graphs: Map<string, LayoutGraph>;
-  rules: Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>;
-};
-type ActiveRuleMatchSet = {
-  key: string;
-  label: string;
-  ruleNames: string[];
-  candidates: RuleCandidate[];
-} | null;
-type RuleDisplayItem = {
-  key: string;
-  label: string;
-  representativeName: string;
-  ruleNames: string[];
-  rules: SceneRule[];
-  previewFormula?: string;
-};
-type EasyRuleSlot = {
-  key: string;
-  label: () => string;
-  representativeName: string;
-  ruleNames: string[];
-  introducedAt: string;
-  previewFormula: string;
-};
-
-const DEFAULT_PUZZLE_ID = 'composite-monad-left-unit';
-const OFFICIAL_FINAL_PUZZLE_ID = 'composite-monad-associativity';
-const BONUS_PUZZLE_ID = 'three-monad-composition';
-const ASSIST_STAGE_SELECTOR = '.stage';
-const RULE_PREVIEW_WIDTH = 220;
-const RULE_PREVIEW_HEIGHT = 112;
-const GUIDED_REWRITE_PUZZLE_IDS = new Set(['composite-monad-left-unit']);
-const EASY_RULE_SLOTS: EasyRuleSlot[] = [
-  {
-    key: 'push-through-crossing',
-    label: () => t.pushForkThroughCrossing,
-    representativeName: 'mx',
-    ruleNames: ['mx', 'nx', 'ny', 'oy', 'mz', 'oz'],
-    introducedAt: 'composite-monad-left-unit',
-    previewFormula: 'm: M⊗M -> M\nx: N⊗M -> M⊗N\nN·m ; x = x·M ; M·x ; m·N'
-  },
-  {
-    key: 'fork-reassociation',
-    label: () => t.forkReassociation,
-    representativeName: 'mA',
-    ruleNames: ['mA', 'nA', 'mm', 'nn', 'oo'],
-    introducedAt: 'clean-up-two-units',
-    previewFormula: 'm: M⊗M -> M\nm·M ; m = M·m ; m'
-  }
-];
+import {
+  BONUS_PUZZLE_ID,
+  DEFAULT_PUZZLE_ID,
+  GUIDED_REWRITE_PUZZLE_IDS,
+  MODE_STORAGE_KEY,
+  RULE_PREVIEW_HEIGHT,
+  RULE_PREVIEW_WIDTH,
+  createAssistStepSets,
+  createEasyRuleSlots,
+  type ActiveRuleMatchSet,
+  type AssistPlacement,
+  type AssistRelativeRect,
+  type AssistStep,
+  type CrossingDiagnostic,
+  type EasyRuleSlot,
+  type InteractionMode,
+  type LayoutState,
+  type PanelMap,
+  type RuleDisplayItem
+} from './app/config';
+import { createPerfPanel } from './app/perfPanel';
+import { displayPuzzleTitle, highlightRocq, proofFileName as makeProofFileName, shareProofText } from './app/proof';
+import {
+  hasMainNextPuzzle as hasMainNextPuzzleFor,
+  isBonusPuzzle as isBonusPuzzleId,
+  isOfficialFinalPuzzle as isOfficialFinalPuzzleId,
+  nextPuzzleId as nextPuzzleIdFor,
+  puzzleIntroduced as puzzleIntroducedFor
+} from './app/puzzles';
+import { fireConfetti } from './app/confetti';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
+const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
+const ASSIST_STEPS = createAssistStepSets(t);
 
 storeLocale(locale);
 document.documentElement.lang = locale;
 document.title = t.appTitle;
-
-const ASSIST_STEPS_LEVEL_1_EXPERT: AssistStep[] = [
-  {
-    selector: ASSIST_STAGE_SELECTOR,
-    padding: 8,
-    focusRect: 'lhs',
-    // Manual tuning hook: relative to the focused LHS region, not the whole viewport.
-    lassoRect: { x: 0.18, y: 0.18, w: 0.42, h: 0.46 },
-    kicker: t.assist.level1[0].kicker,
-    title: t.assist.level1[0].title,
-    body: t.assist.level1[0].body,
-    placement: 'right',
-    selectionDemo: 'level-1-em',
-    demo: 'lasso'
-  },
-  {
-    selector: '#rules',
-    padding: 8,
-    before: 'select-level-1',
-    kicker: t.assist.level1[1].kicker,
-    title: t.assist.level1[1].title,
-    body: t.assist.level1[1].body,
-    placement: 'top'
-  },
-  {
-    selector: ASSIST_STAGE_SELECTOR,
-    padding: 8,
-    focusRect: 'lhs',
-    before: 'apply-level-1',
-    kicker: t.assist.level1[2].kicker,
-    title: t.assist.level1[2].title,
-    body: t.assist.level1[2].body,
-    placement: 'right'
-  },
-  {
-    selector: ASSIST_STAGE_SELECTOR,
-    padding: 8,
-    kicker: t.assist.level1[3].kicker,
-    title: t.assist.level1[3].title,
-    body: t.assist.level1[3].body,
-    placement: 'top'
-  }
-];
-
-const ASSIST_STEPS_LEVEL_1_EASY: AssistStep[] = [
-  {
-    selector: '#rules',
-    padding: 8,
-    pulse: 'level-1-rule',
-    kicker: t.assist.level1Easy[0].kicker,
-    title: t.assist.level1Easy[0].title,
-    body: t.assist.level1Easy[0].body,
-    placement: 'top'
-  },
-  {
-    selector: ASSIST_STAGE_SELECTOR,
-    padding: 8,
-    focusRect: 'lhs',
-    before: 'activate-level-1-rule',
-    kicker: t.assist.level1Easy[1].kicker,
-    title: t.assist.level1Easy[1].title,
-    body: t.assist.level1Easy[1].body,
-    placement: 'right'
-  },
-  {
-    selector: ASSIST_STAGE_SELECTOR,
-    padding: 8,
-    focusRect: 'lhs',
-    before: 'apply-level-1-candidate',
-    kicker: t.assist.level1Easy[2].kicker,
-    title: t.assist.level1Easy[2].title,
-    body: t.assist.level1Easy[2].body,
-    placement: 'right'
-  },
-  {
-    selector: '#rules',
-    padding: 8,
-    pulse: 'level-1-rule',
-    kicker: t.assist.level1Easy[3].kicker,
-    title: t.assist.level1Easy[3].title,
-    body: t.assist.level1Easy[3].body,
-    placement: 'top'
-  }
-];
-
-const ASSIST_STEPS_LEVEL_2_EASY: AssistStep[] = [
-  {
-    selector: '.rule[data-rule-name="mA"]',
-    padding: 8,
-    pulseRuleName: 'mA',
-    kicker: t.assist.level2Easy[0].kicker,
-    title: t.assist.level2Easy[0].title,
-    body: t.assist.level2Easy[0].body,
-    placement: 'top'
-  }
-];
-
-const ASSIST_STEPS_LEVEL_3_EXPERT: AssistStep[] = [
-  {
-    selector: ASSIST_STAGE_SELECTOR,
-    padding: 8,
-    focusRect: 'rhs',
-    kicker: t.assist.level3Expert[0].kicker,
-    title: t.assist.level3Expert[0].title,
-    body: t.assist.level3Expert[0].body,
-    placement: 'left'
-  }
-];
-
-const ASSIST_STEPS_LEVEL_3_EASY: AssistStep[] = [
-  {
-    selector: '#rules',
-    padding: 8,
-    kicker: t.assist.level3Easy[0].kicker,
-    title: t.assist.level3Easy[0].title,
-    body: t.assist.level3Easy[0].body,
-    placement: 'top'
-  }
-];
-
-const ASSIST_STEPS_LEVEL_5_EXPERT: AssistStep[] = [
-  {
-    selector: '#rules',
-    padding: 8,
-    kicker: t.assist.level5Expert[0].kicker,
-    title: t.assist.level5Expert[0].title,
-    body: t.assist.level5Expert[0].body,
-    placement: 'top'
-  }
-];
-
-const ASSIST_STEPS_LEVEL_5_EASY: AssistStep[] = [
-  {
-    selector: '.rule[data-rule-name="xyz"]',
-    padding: 8,
-    pulseRuleName: 'xyz',
-    kicker: t.assist.level5Easy[0].kicker,
-    title: t.assist.level5Easy[0].title,
-    body: t.assist.level5Easy[0].body,
-    placement: 'top'
-  }
-];
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app root');
@@ -608,8 +426,6 @@ const emptySelection = (): SelectionDescriptor => ({
   cycleOrder: []
 });
 
-type InteractionMode = 'easy' | 'expert';
-const MODE_STORAGE_KEY = 'string-diagrams.interactionMode';
 const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
 const initialInteractionMode: InteractionMode = storedMode === 'expert' ? 'expert' : 'easy';
 
@@ -776,29 +592,15 @@ const clearActiveRuleMatches = () => {
   invalidateRuleDock();
 };
 
-const nextPuzzleId = () => {
-  const idx = puzzles.findIndex((p) => p.id === activePuzzleId);
-  if (idx < 0 || puzzles.length === 0) return DEFAULT_PUZZLE_ID;
-  return puzzles[(idx + 1) % puzzles.length].id;
-};
+const nextPuzzleId = () => nextPuzzleIdFor(puzzles, activePuzzleId);
 
-const puzzleIndex = (puzzleId: string) => puzzles.findIndex((p) => p.id === puzzleId);
+const puzzleIntroduced = (puzzleId: string) => puzzleIntroducedFor(puzzles, activePuzzleId, puzzleId);
 
-const puzzleIntroduced = (puzzleId: string) => {
-  const currentIdx = puzzleIndex(activePuzzleId);
-  const introducedIdx = puzzleIndex(puzzleId);
-  return currentIdx >= 0 && introducedIdx >= 0 && currentIdx >= introducedIdx;
-};
+const hasMainNextPuzzle = () => hasMainNextPuzzleFor(puzzles, activePuzzleId);
 
-const hasMainNextPuzzle = () => {
-  const idx = puzzleIndex(activePuzzleId);
-  const finalIdx = puzzleIndex(OFFICIAL_FINAL_PUZZLE_ID);
-  return idx >= 0 && finalIdx >= 0 && idx < finalIdx;
-};
+const isOfficialFinalPuzzle = () => isOfficialFinalPuzzleId(activePuzzleId);
 
-const isOfficialFinalPuzzle = () => activePuzzleId === OFFICIAL_FINAL_PUZZLE_ID;
-
-const isBonusPuzzle = () => activePuzzleId === BONUS_PUZZLE_ID;
+const isBonusPuzzle = () => isBonusPuzzleId(activePuzzleId);
 
 const loadPuzzle = (puzzleId: string) => {
   stopTutorial();
@@ -834,47 +636,14 @@ const requestRender = (reason: string, refresh = true) => {
   });
 };
 
-const formatPerfRows = () => {
-  const rows = perf.snapshot();
-  const crossingLine = perf.debugCrossings
-    ? `unintended crossings: ${debugCrossings.length}`
-    : 'unintended crossings: off';
-  const selectionLine = `selection fallback debug: ${perf.debugSelection ? 'on' : 'off'}`;
-  if (rows.length === 0) return `No samples yet. Lasso or apply a rewrite.\n${crossingLine}\n${selectionLine}`;
-  const head = 'name                         count   total    avg    max';
-  const body = rows.slice(0, 14).map((row) => [
-    row.name.padEnd(28).slice(0, 28),
-    String(row.count).padStart(5),
-    `${row.totalMs.toFixed(1)}ms`.padStart(8),
-    `${row.avgMs.toFixed(3)}ms`.padStart(8),
-    `${row.maxMs.toFixed(1)}ms`.padStart(7)
-  ].join(' '));
-  const crossingDetails = debugCrossings.slice(0, 6).map((c) => `  ${c.graphId}: ${c.edgeA} × ${c.edgeB}`);
-  return [crossingLine, selectionLine, ...crossingDetails, '', head, ...body].join('\n');
-};
+const perfPanelController = createPerfPanel({
+  panel: perfPanel,
+  output: perfOutput,
+  getCrossings: () => debugCrossings,
+  t
+});
 
-let perfPanelTimer: number | undefined;
-
-const updatePerfPanel = () => {
-  if (!perf.enabled || perfPanel.hidden) return;
-  perfOutput.textContent = formatPerfRows();
-};
-
-const showPerfPanel = () => {
-  if (!perf.enabled) return;
-  perfPanel.hidden = false;
-  updatePerfPanel();
-  window.clearInterval(perfPanelTimer);
-  perfPanelTimer = window.setInterval(updatePerfPanel, 1000);
-};
-
-const hidePerfPanel = () => {
-  perfPanel.hidden = true;
-  window.clearInterval(perfPanelTimer);
-  perfPanelTimer = undefined;
-};
-
-if (perf.enabled) showPerfPanel();
+if (perf.enabled) perfPanelController.show();
 
 const bumpMoves = () => {
   moveCount += 1;
@@ -882,167 +651,11 @@ const bumpMoves = () => {
   moveCounter?.setAttribute('data-shown', 'true');
 };
 
-const fireConfetti = (finale = false) => {
-  const c = confettiCanvas.getContext('2d');
-  if (!c) return;
-  const rect = successModal.getBoundingClientRect();
-  const width = Math.max(window.innerWidth, document.documentElement.clientWidth || 0, rect.width, 1);
-  const viewportHeight = Math.max(window.innerHeight, document.documentElement.clientHeight || 0, rect.height, 1);
-  const height = Math.min(viewportHeight, 460);
-  const dpr = clamp(window.devicePixelRatio || 1, 1, 1.25);
-  confettiCanvas.width = Math.floor(width * dpr);
-  confettiCanvas.height = Math.floor(height * dpr);
-  confettiCanvas.style.width = `${width}px`;
-  confettiCanvas.style.height = `${height}px`;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const colors = [
-    cssVar('--accent', '#3b73c4'),
-    cssVar('--strand-a', '#0072b2'),
-    cssVar('--strand-b', '#d55e00'),
-    cssVar('--node-o', '#f0e442'),
-    cssVar('--node-x', '#009e73')
-  ];
-  const duration = finale ? 5200 : 2600;
-  const started = Date.now();
-  let lastBurst = 0;
-  const maxBits = finale ? 170 : 105;
-  type ConfettiBit = {
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    g: number;
-    w: number;
-    h: number;
-    color: string;
-    life: number;
-    maxLife: number;
-  };
-  const bits: ConfettiBit[] = [];
-  const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
-  const addBit = (bit: ConfettiBit) => {
-    if (bits.length < maxBits) bits.push(bit);
-  };
-  const burst = (originX: number, originY: number, count: number, spread = 1) => {
-    const room = Math.max(0, maxBits - bits.length);
-    for (let i = 0; i < Math.min(count, room); i += 1) {
-      const angle = randomInRange(-Math.PI * (0.95 * spread), -Math.PI * (0.05 + (1 - spread) * 0.25));
-      const speed = randomInRange(2.4, finale ? 8.2 : 7);
-      const life = randomInRange(58, finale ? 116 : 96);
-      const size = randomInRange(finale ? 5 : 4.5, finale ? 12 : 10);
-      addBit({
-        x: originX,
-        y: originY,
-        vx: Math.cos(angle) * speed + randomInRange(-0.8, 0.8),
-        vy: Math.sin(angle) * speed - randomInRange(0.2, 1.8),
-        g: randomInRange(0.08, 0.14),
-        w: size,
-        h: Math.random() > 0.38 ? size * 0.32 : size,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        life,
-        maxLife: life
-      });
-    }
-  };
-  const rain = (count: number) => {
-    for (let i = 0; i < count && bits.length < maxBits; i += 1) {
-      const size = randomInRange(4, 9);
-      const life = randomInRange(80, 132);
-      addBit({
-        x: randomInRange(width * 0.08, width * 0.92),
-        y: randomInRange(-28, 10),
-        vx: randomInRange(-0.45, 0.45),
-        vy: randomInRange(1.8, 3.1),
-        g: randomInRange(0.035, 0.065),
-        w: size,
-        h: size * 0.36,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        life,
-        maxLife: life
-      });
-    }
-  };
-  const tick = () => {
-    const elapsed = Date.now() - started;
-    const timeLeft = Math.max(0, duration - elapsed);
-    if (elapsed - lastBurst > 320 && timeLeft > 0) {
-      lastBurst = elapsed;
-      const particleCount = Math.max(finale ? 5 : 3, Math.floor((finale ? 16 : 11) * (timeLeft / duration)));
-      burst(width * randomInRange(0.08, 0.28), height * randomInRange(-0.03, 0.16), particleCount, 0.92);
-      burst(width * randomInRange(0.72, 0.92), height * randomInRange(-0.03, 0.16), particleCount, 0.92);
-      if (finale && elapsed < duration * 0.7) {
-        rain(8);
-        burst(width * randomInRange(0.32, 0.68), height * randomInRange(0.02, 0.24), Math.max(2, Math.floor(particleCount * 0.45)), 0.72);
-      }
-    }
-    c.clearRect(0, 0, width, height);
-    const flash = Math.max(0, 1 - elapsed / (finale ? 760 : 520));
-    if (flash > 0) {
-      c.globalAlpha = flash * 0.34;
-      c.fillStyle = '#ffffff';
-      c.beginPath();
-      c.arc(width * 0.5, height * 0.24, (1 - flash) * (finale ? 180 : 120) + 22, 0, Math.PI * 2);
-      c.fill();
-      c.globalAlpha = 1;
-    }
-    for (let i = bits.length - 1; i >= 0; i -= 1) {
-      const bit = bits[i];
-      if (bit.life <= 0) {
-        bits.splice(i, 1);
-        continue;
-      }
-      bit.life -= 1;
-      bit.x += bit.vx;
-      bit.y += bit.vy;
-      bit.vy += bit.g;
-      if (bit.life <= 0 || bit.y > height + 80) {
-        bits.splice(i, 1);
-        continue;
-      }
-      c.fillStyle = bit.color;
-      c.globalAlpha = Math.min(1, bit.life / Math.min(22, bit.maxLife * 0.6));
-      c.fillRect(bit.x - bit.w * 0.5, bit.y - bit.h * 0.5, bit.w, bit.h);
-    }
-    c.globalAlpha = 1;
-    if (timeLeft > 0 || bits.length > 0) requestAnimationFrame(tick);
-    else c.clearRect(0, 0, width, height);
-  };
-  burst(width * 0.5, height * 0.24, finale ? 70 : 42, 0.72);
-  burst(width * 0.2, height * 0.12, finale ? 28 : 16, 0.9);
-  burst(width * 0.8, height * 0.12, finale ? 28 : 16, 0.9);
-  if (finale) rain(26);
-  tick();
-};
-
-const displayPuzzleTitle = (puzzle: PuzzleInfo) => puzzle.title.replace(new RegExp(`^${puzzle.level}:\\s*`), '');
-
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-
-const highlightRocqLine = (line: string) => {
-  if (/^\s*\(\*/.test(line)) return `<span class="rocq-comment">${escapeHtml(line)}</span>`;
-  let out = escapeHtml(line);
-  out = out.replace(/\b(Goal|Proof|Qed|transitivity|rewrite|reflexivity|mcat)\b/g, '<span class="rocq-keyword">$1</span>');
-  out = out.replace(/\b(R\d+)\b/g, '<span class="rocq-rule">$1</span>');
-  return out;
-};
-
-const highlightRocq = (script: string) => script.split('\n').map(highlightRocqLine).join('\n');
-
 const currentProofText = () => scene.proofText || adapter.exportProof() || t.noProofYet;
 
 const proofFileName = () => {
   const puzzle = puzzles.find((p) => p.id === activePuzzleId);
-  const label = puzzle ? `${puzzle.level} ${displayPuzzleTitle(puzzle)}` : scene.title || 'string diagram proof';
-  const slug = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'string-diagram-proof';
-  return `${slug}.v`;
+  return makeProofFileName(puzzle, scene.title);
 };
 
 const setProofShareStatus = (message: string) => {
@@ -1053,37 +666,7 @@ const setProofShareStatus = (message: string) => {
 const shareProof = async () => {
   const proofText = currentProofText();
   const title = proofTitle.textContent || t.proofKicker;
-  const file = new File([proofText], proofFileName(), { type: 'text/plain' });
-  const nav = navigator as Navigator & {
-    canShare?: (data: ShareData & { files?: File[] }) => boolean;
-    share?: (data: ShareData & { files?: File[] }) => Promise<void>;
-  };
-
-  try {
-    if (nav.share && nav.canShare?.({ files: [file] })) {
-      await nav.share({ title, text: t.proofShareText, files: [file] });
-      setProofShareStatus(t.shareSheetOpened);
-      return;
-    }
-    if (nav.share) {
-      await nav.share({ title, text: proofText });
-      setProofShareStatus(t.shareSheetOpened);
-      return;
-    }
-  } catch (error) {
-    const name = error instanceof DOMException ? error.name : '';
-    if (name === 'AbortError') {
-      setProofShareStatus('');
-      return;
-    }
-  }
-
-  try {
-    await navigator.clipboard.writeText(proofText);
-    setProofShareStatus(t.proofCopied);
-  } catch {
-    setProofShareStatus(t.shareUnavailable);
-  }
+  setProofShareStatus(await shareProofText({ proofText, title, fileName: proofFileName(), t }));
 };
 
 const showSuccess = () => {
@@ -1099,7 +682,7 @@ const showSuccess = () => {
     nextButton.textContent = hasNext ? t.nextLabel(puzzles[idx + 1].level) : t.nextLevel;
   }
   successModal.setAttribute('data-open', 'true');
-  fireConfetti(!hasNext || isBonusPuzzle());
+  fireConfetti({ canvas: confettiCanvas, host: successModal, finale: !hasNext || isBonusPuzzle(), cssVar });
 };
 
 const showProof = () => {
@@ -1305,11 +888,11 @@ const applyLevelOneEasyCandidate = async () => {
 
 const currentAssistSteps = () => {
   if (GUIDED_REWRITE_PUZZLE_IDS.has(activePuzzleId)) {
-    return expertMode ? ASSIST_STEPS_LEVEL_1_EXPERT : ASSIST_STEPS_LEVEL_1_EASY;
+    return expertMode ? ASSIST_STEPS.level1Expert : ASSIST_STEPS.level1Easy;
   }
-  if (activePuzzleId === 'clean-up-two-units' && !expertMode) return ASSIST_STEPS_LEVEL_2_EASY;
-  if (activePuzzleId === 'both-sides-meet') return expertMode ? ASSIST_STEPS_LEVEL_3_EXPERT : ASSIST_STEPS_LEVEL_3_EASY;
-  if (activePuzzleId === 'three-monad-composition') return expertMode ? ASSIST_STEPS_LEVEL_5_EXPERT : ASSIST_STEPS_LEVEL_5_EASY;
+  if (activePuzzleId === 'clean-up-two-units' && !expertMode) return ASSIST_STEPS.level2Easy;
+  if (activePuzzleId === 'both-sides-meet') return expertMode ? ASSIST_STEPS.level3Expert : ASSIST_STEPS.level3Easy;
+  if (activePuzzleId === 'three-monad-composition') return expertMode ? ASSIST_STEPS.level5Expert : ASSIST_STEPS.level5Easy;
   return [];
 };
 
@@ -3057,20 +2640,18 @@ document.addEventListener('click', (e) => {
     const action = perfActionEl.dataset.perfAction;
     if (action === 'reset') {
       perf.reset();
-      updatePerfPanel();
+      perfPanelController.update();
     } else if (action === 'crossings') {
       perf.setDebugCrossings(!perf.debugCrossings);
       requestRender('debug-crossings');
-      updatePerfPanel();
+      perfPanelController.update();
     } else if (action === 'selection') {
       perf.setDebugSelection(!perf.debugSelection);
-      updatePerfPanel();
+      perfPanelController.update();
     } else if (action === 'copy') {
-      const text = JSON.stringify(perf.snapshot(), null, 2);
-      void navigator.clipboard?.writeText(text).catch(() => undefined);
-      perfOutput.textContent = `${formatPerfRows()}\n\n${t.copiedJson}`;
+      perfPanelController.copyReport();
     } else if (action === 'hide') {
-      hidePerfPanel();
+      perfPanelController.hide();
     }
     return;
   }
