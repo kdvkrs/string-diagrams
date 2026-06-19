@@ -7,18 +7,14 @@ import { perf } from './perf';
 import {
   type Point,
   type Rect,
-  type SvgOpts,
   type View,
   toScreen,
-  rulePreviewSvg as rulePreviewSvgBase,
 } from './diagramSvg';
 import { getInitialLocale, localizePuzzle, localizePuzzles, storeLocale, supportedLocales, switchLocale, translations, type Locale } from './i18n';
 import {
   BONUS_PUZZLE_ID,
   DEFAULT_PUZZLE_ID,
   GUIDED_REWRITE_PUZZLE_IDS,
-  RULE_PREVIEW_HEIGHT,
-  RULE_PREVIEW_WIDTH,
   createAssistStepSets,
   createEasyRuleSlots,
   type ActiveRuleMatchSet,
@@ -51,7 +47,6 @@ import {
 import { fireConfetti } from './app/confetti';
 import {
   candidateHitsAt as easyCandidateHitsAt,
-  candidateKey,
   candidateRect as easyCandidateRect,
   ruleDisplayItems as easyRuleDisplayItems,
   selectionFromCandidate,
@@ -66,6 +61,7 @@ import {
 import { renderSuccessModal } from './app/successModal';
 import { createSelectionFeedback } from './app/selectionFeedback';
 import { createMoveCounter } from './app/moveCounter';
+import { createRuleDock } from './app/ruleDock';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -418,12 +414,8 @@ const localizeScene = (nextScene: SceneState): SceneState => {
 };
 let scene: SceneState = localizeScene(adapter.getScene());
 let layouts: LayoutState | null = null;
-const fallbackRulePreviewCache = new Map<string, { lhs: LayoutGraph; rhs: LayoutGraph }>();
-const fallbackRulePreviewLoading = new Set<string>();
 let layoutEpoch = 0;
 let sceneRevision = 0;
-let easyCandidateCountCacheKey = '';
-let easyCandidateCountCache = new Map<string, number>();
 let activePuzzleId = scene.puzzleId || DEFAULT_PUZZLE_ID;
 const disabledRulesFor = (s: SceneState, reason = t.reason('No selection')): RuleAvailability[] =>
   s.rules.map((rule) => ({ name: rule.name, enabled: false, reason }));
@@ -447,7 +439,6 @@ let zoom = 1;
 let proofOpen = false;
 let successOpen = false;
 let renderedLevelsKey = '';
-let renderedRulesKey = '';
 let layoutStopRequested = false;
 let tutorialRunning = false;
 let tutorialAbort: AbortController | null = null;
@@ -509,6 +500,14 @@ const cssVar = (name: string, fallback: string) => {
 
 const moveCounterController = createMoveCounter({ count: moveCountEl, counter: moveCounter });
 const bumpMoves = moveCounterController.bump;
+const ruleDock = createRuleDock({
+  container: rulesContainer,
+  shell: rulesShell,
+  cssVar,
+  renderRule: (formula) => adapter.renderRule(formula),
+  ruleCandidates: (ruleName) => adapter.ruleCandidates(ruleName),
+  t
+});
 
 const resetShellState = () => {
   proofOpen = false;
@@ -573,12 +572,11 @@ const stopAssist = () => {
 };
 
 const invalidateRuleDock = () => {
-  renderedRulesKey = '';
+  ruleDock.invalidate();
 };
 
 const invalidateEasyCandidateCounts = () => {
-  easyCandidateCountCacheKey = '';
-  easyCandidateCountCache = new Map();
+  ruleDock.invalidateCandidateCounts();
 };
 
 const clearActiveRuleMatches = () => {
@@ -721,7 +719,7 @@ const startTutorial = async () => {
         lhs: await layoutSceneGraph(tutorialRule.lhs),
         rhs: await layoutSceneGraph(tutorialRule.rhs)
       };
-      drawRulePreviewGraphs(tutorialRulePreview, previewLayouts, false);
+      ruleDock.drawPreviewGraphs(tutorialRulePreview, previewLayouts, false, expertMode);
     }
     const drawTutorial = (graphs: Map<string, LayoutGraph>, selected = new Set<string>(), path: Point[] = []) => {
       const rect = tutorialCanvas.getBoundingClientRect();
@@ -1959,88 +1957,6 @@ const evaluateSelection = (panels: PanelMap) => {
   }
 };
 
-const sharedRulePreviewOpts = (): SvgOpts => ({
-  edgeStrokeWidth: 2.8,
-  nodeScale: 1.18,
-  triangleScale: 1.34,
-  previewZoom: 1.18
-});
-
-const rulePreviewSvg = (rule: { lhs: LayoutGraph; rhs: LayoutGraph }, width: number, height: number, dimmed: boolean) =>
-  rulePreviewSvgBase(rule, width, height, dimmed, expertMode
-    ? { ...sharedRulePreviewOpts(), pinColor: cssVar('--pin', '#9aa8b8') }
-    : {
-        ...sharedRulePreviewOpts(),
-        pinColor: '#9aa3ad',
-        crossingFill: '#ffffff',
-        crossingStroke: '#111111',
-        nodeStroke: '#111111',
-        colorMap: {
-          '0,114,178': '#000000',
-          '0,115,179': '#000000',
-          '213,94,0': '#6a6a6a',
-          '214,94,0': '#6a6a6a',
-          '255,102,0': '#6a6a6a',
-          '0,102,102': '#767676',
-          '0,158,114': '#969696',
-          '0,158,115': '#969696',
-          '0,159,115': '#969696',
-          '239,226,66': '#bdbdbd',
-          '240,228,66': '#bdbdbd',
-          '204,25,25': '#252525',
-          '128,128,128': '#d0d0d0'
-        }
-      });
-
-const drawRulePreviewGraphs = (container: HTMLElement, rule: { lhs: LayoutGraph; rhs: LayoutGraph }, dimmed: boolean) => {
-  container.innerHTML = rulePreviewSvg(rule, RULE_PREVIEW_WIDTH, RULE_PREVIEW_HEIGHT, dimmed);
-};
-
-const drawRulePreviewLoading = (container: HTMLElement, dimmed: boolean) => {
-  container.innerHTML = `
-    <svg class="rule-preview-svg" viewBox="0 0 ${RULE_PREVIEW_WIDTH} ${RULE_PREVIEW_HEIGHT}" role="img" aria-label="${t.rulePreviewLoading}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${RULE_PREVIEW_WIDTH}" height="${RULE_PREVIEW_HEIGHT}" rx="8" fill="${dimmed ? '#f2f6fb' : '#fbfdff'}" />
-      <text x="${RULE_PREVIEW_WIDTH * 0.5}" y="${RULE_PREVIEW_HEIGHT * 0.5}" text-anchor="middle" dominant-baseline="central" fill="#8da0b3" font-family="Avenir Next, sans-serif" font-size="11" font-weight="600">${t.layoutLoading}</text>
-    </svg>
-  `;
-};
-
-const drawRulePreview = (container: HTMLElement, item: RuleDisplayItem, dimmed: boolean) => {
-  const rule = layouts?.rules.get(item.representativeName);
-  if (!rule) {
-    if (!item.previewFormula) {
-      drawRulePreviewLoading(container, dimmed);
-      return;
-    }
-    const cached = fallbackRulePreviewCache.get(item.previewFormula);
-    if (cached) {
-      drawRulePreviewGraphs(container, cached, dimmed);
-      return;
-    }
-    drawRulePreviewLoading(container, dimmed);
-    if (fallbackRulePreviewLoading.has(item.previewFormula)) return;
-    fallbackRulePreviewLoading.add(item.previewFormula);
-    void (async () => {
-      const formula = item.previewFormula ?? '';
-      try {
-        const fallbackRule = adapter.renderRule(formula);
-        const preview = {
-          lhs: await layoutSceneGraph(fallbackRule.lhs),
-          rhs: await layoutSceneGraph(fallbackRule.rhs)
-        };
-        fallbackRulePreviewCache.set(formula, preview);
-        if (document.body.contains(container)) drawRulePreviewGraphs(container, preview, dimmed);
-      } catch {
-        drawRulePreviewLoading(container, dimmed);
-      } finally {
-        fallbackRulePreviewLoading.delete(formula);
-      }
-    })();
-    return;
-  }
-  drawRulePreviewGraphs(container, rule, dimmed);
-};
-
 const ruleDisplayItems = (): RuleDisplayItem[] => {
   return easyRuleDisplayItems({
     expertMode,
@@ -2070,38 +1986,6 @@ const renderLevelButtons = () => {
   levelActions.value = activePuzzleId;
 };
 
-const updateRuleScrollState = () => {
-  const overflow = rulesContainer.scrollWidth > rulesContainer.clientWidth + 2;
-  const maxScroll = Math.max(0, rulesContainer.scrollWidth - rulesContainer.clientWidth);
-  const atStart = rulesContainer.scrollLeft <= 2;
-  const atEnd = rulesContainer.scrollLeft >= maxScroll - 2;
-  rulesShell.dataset.overflow = String(overflow);
-  rulesShell.dataset.atStart = String(!overflow || atStart);
-  rulesShell.dataset.atEnd = String(!overflow || atEnd);
-  if (!overflow) rulesShell.removeAttribute('data-scrolled');
-};
-
-const easyCandidateCounts = (items: RuleDisplayItem[]) => {
-  if (expertMode || !layouts || currentSelection.selectedNodeIds.length > 0) return new Map<string, number>();
-  const key = [
-    sceneRevision,
-    activePuzzleId,
-    items.map((item) => `${item.key}:${item.ruleNames.join('+')}`).join(',')
-  ].join('|');
-  if (key === easyCandidateCountCacheKey) return easyCandidateCountCache;
-  const counts = perf.time('easy.ruleCandidateCounts', () => {
-    const nextCounts = new Map<string, number>();
-    items.forEach((item) => {
-      const count = item.ruleNames.reduce((sum, ruleName) => sum + adapter.ruleCandidates(ruleName).length, 0);
-      nextCounts.set(item.key, count);
-    });
-    return nextCounts;
-  });
-  easyCandidateCountCacheKey = key;
-  easyCandidateCountCache = counts;
-  return counts;
-};
-
 const refreshUi = () => {
   const modePrompt = expertMode ? t.expertPrompt : t.easyPrompt;
   const lastMessage = scene.messages[0] || scene.subtitle || modePrompt;
@@ -2109,7 +1993,6 @@ const refreshUi = () => {
   const hasManualSelection = expertMode && hasSelection;
   const hasEnabledRule = rules.some((r) => r.enabled);
   const displayItems = ruleDisplayItems();
-  const easyCounts = easyCandidateCounts(displayItems);
   subtitle.textContent = ambiguousRuleMatches
     ? t.ambiguousRuleCandidates
     : activeRuleMatches
@@ -2120,77 +2003,18 @@ const refreshUi = () => {
   if (proofOpen) proof.innerHTML = highlightRocq(currentProofText());
   renderLevelButtons();
   syncModeControls();
-  rulesContainer.dataset.selection = String(hasManualSelection);
-  rulesContainer.dataset.mode = interactionMode();
-  const ruleKey = [
+  ruleDock.render({
     activePuzzleId,
-    layouts ? 'ready' : 'pending',
-    expertMode ? 'expert' : 'rule-first',
-    activeRuleMatches ? `${activeRuleMatches.key}:${activeRuleMatches.candidates.length}` : 'no-active-rule',
-    ambiguousRuleMatches ? `${ambiguousRuleMatches.key}:${ambiguousRuleMatches.candidates.map(candidateKey).join('+')}` : 'no-ambiguous-rule',
-    [...easyCounts.entries()].map(([key, count]) => `${key}:${count}`).join(','),
-    scene.rules.map((r) => r.name).join(','),
-    displayItems.map((item) => `${item.key}:${item.label}:${item.ruleNames.join('+')}`).join(','),
-    rules.map((r) => `${r.name}:${r.enabled ? 1 : 0}:${r.reason ?? ''}`).join(',')
-  ].join('|');
-  if (ruleKey === renderedRulesKey) {
-    requestAnimationFrame(updateRuleScrollState);
-    return;
-  }
-  renderedRulesKey = ruleKey;
-  if (!hasSelection) rulesShell.removeAttribute('data-scrolled');
-  rulesContainer.replaceChildren(
-    ...displayItems.map((item, idx) => {
-      const availabilities = item.ruleNames.map((name) => rules.find((r) => r.name === name) ?? { name, enabled: false, reason: t.unavailable });
-      const manuallyApplicable = hasManualSelection && availabilities.some((ra) => ra.enabled);
-      const easyApplicable = expertMode || hasManualSelection || (easyCounts.get(item.key) ?? 0) > 0;
-      const dimmed = hasManualSelection ? !manuallyApplicable : !easyApplicable;
-      const disabled = !layouts || item.ruleNames.length === 0 || (hasManualSelection && !manuallyApplicable) || (!hasManualSelection && !easyApplicable);
-      const active = activeRuleMatches?.key === item.key;
-      const btn = document.createElement('button');
-      btn.className = 'rule';
-      btn.dataset.dimmed = String(dimmed);
-      btn.dataset.active = String(active);
-      btn.type = 'button';
-      btn.dataset.action = 'rule';
-      btn.dataset.ruleName = item.representativeName;
-      btn.dataset.ruleNames = item.ruleNames.join('\n');
-      btn.dataset.ruleGroupKey = item.key;
-      btn.dataset.ruleLabel = item.label;
-      btn.dataset.ruleKey = `R${idx + 1}`;
-      btn.disabled = disabled;
-      btn.title = disabled && layouts
-        ? t.unavailable
-        : manuallyApplicable
-        ? t.applyRule(item.label)
-        : active
-          ? t.matchingRegionsForRule(activeRuleMatches?.candidates.length ?? 0, item.label)
-          : layouts
-            ? t.findMatchingRegions(item.label)
-            : t.layoutLoading;
-      btn.innerHTML = `
-        <div class="rule-meta" aria-hidden="${expertMode ? 'false' : 'true'}"><span class="rule-badge">R${idx + 1}</span><span class="rule-name"></span></div>
-        <div class="rule-preview" aria-hidden="true"></div>
-      `;
-      const nameEl = btn.querySelector<HTMLElement>('.rule-name');
-      if (nameEl) nameEl.textContent = item.label;
-      const pv = btn.querySelector<HTMLElement>('.rule-preview');
-      if (pv) drawRulePreview(pv, item, dimmed);
-      return btn;
-    })
-  );
-  setTimeout(() => {
-    rulesContainer.querySelectorAll<HTMLElement>('.rule-preview').forEach((pv) => {
-      if (pv.clientHeight > 0) {
-        const btn = pv.closest<HTMLElement>('button.rule');
-        const dimmed = btn?.dataset.dimmed === 'true';
-        const item = btn ? displayItems.find((entry) => entry.key === btn.dataset.ruleGroupKey) : undefined;
-        if (item) drawRulePreview(pv, item, dimmed);
-      }
-    });
-    updateRuleScrollState();
-  }, 0);
-  requestAnimationFrame(updateRuleScrollState);
+    activeRuleMatches,
+    ambiguousRuleMatches,
+    displayItems,
+    expertMode,
+    hasSelection,
+    layouts,
+    rules,
+    sceneRevision,
+    sceneRules: scene.rules
+  });
 };
 
 const panelsForSize = (cssW: number, cssH: number): PanelMap => {
@@ -2638,12 +2462,12 @@ rulesContainer.addEventListener(
   'scroll',
   () => {
     if (rulesContainer.scrollLeft > 8) rulesShell.dataset.scrolled = 'true';
-    updateRuleScrollState();
+    ruleDock.updateScrollState();
   },
   { passive: true }
 );
 
-window.addEventListener('resize', () => requestAnimationFrame(updateRuleScrollState));
+window.addEventListener('resize', () => requestAnimationFrame(ruleDock.updateScrollState));
 
 if (typeof (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver !== 'undefined') {
   const ro = new ResizeObserver(() => requestRender('resize', false));
