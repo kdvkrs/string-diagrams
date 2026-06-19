@@ -65,6 +65,7 @@ import {
 } from './app/interactionMode';
 import { renderSuccessModal } from './app/successModal';
 import { createSelectionFeedback } from './app/selectionFeedback';
+import { createMoveCounter } from './app/moveCounter';
 const locale: Locale = getInitialLocale();
 const t = translations[locale];
 const EASY_RULE_SLOTS: EasyRuleSlot[] = createEasyRuleSlots(t);
@@ -443,7 +444,6 @@ let ambiguousRuleMatches: ActiveRuleMatchSet = null;
 let lasso: Point[] = [];
 let dragging = false;
 let zoom = 1;
-let moveCount = 0;
 let proofOpen = false;
 let successOpen = false;
 let renderedLevelsKey = '';
@@ -507,12 +507,13 @@ const cssVar = (name: string, fallback: string) => {
   return value || fallback;
 };
 
+const moveCounterController = createMoveCounter({ count: moveCountEl, counter: moveCounter });
+const bumpMoves = moveCounterController.bump;
+
 const resetShellState = () => {
-  moveCount = 0;
   proofOpen = false;
   successOpen = false;
-  if (moveCountEl) moveCountEl.textContent = '0';
-  moveCounter?.removeAttribute('data-shown');
+  moveCounterController.reset();
   successModal.removeAttribute('data-open');
   successModal.removeAttribute('data-final');
   proofPanel.removeAttribute('data-open');
@@ -638,12 +639,6 @@ const perfPanelController = createPerfPanel({
 });
 
 if (perf.enabled) perfPanelController.show();
-
-const bumpMoves = () => {
-  moveCount += 1;
-  if (moveCountEl) moveCountEl.textContent = String(moveCount);
-  moveCounter?.setAttribute('data-shown', 'true');
-};
 
 const currentProofText = () => scene.proofText || adapter.exportProof() || t.noProofYet;
 
